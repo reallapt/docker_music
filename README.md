@@ -27,10 +27,7 @@ An Apple Music inspired web music player with a Liquid Glass interface, LUFS lou
   内置 `EN / 中文` 一键切换。
 
 ## Supported Formats / 支持格式
-
-- `mp3`
-- `m4a`
-- `aac`
+.mp3, .m4a, .aac
 
 ## Stack / 技术栈
 
