@@ -7,5 +7,7 @@ services:
     environment:
       PORT: 3000
       DEFAULT_TARGET_LUFS: -14
+      PROCESSING_CONCURRENCY: all
+      CONVERSION_CONCURRENCY: all
     volumes:
       - ./data:/app/data

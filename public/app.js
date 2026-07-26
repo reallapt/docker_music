@@ -1,187 +1,402 @@
+const MAX_PARALLEL_UPLOADS = 4;
+
 const state = {
   tracks: [],
+  playlists: [],
+  selectedTrackIds: [],
+  converterSelectedTrackIds: [],
   currentTrackId: null,
+  activePlaylistId: null,
+  playlistBuilderOpen: false,
+  playbackMode: localStorage.getItem("music-player-playback-mode") || "sequence",
+  theme: localStorage.getItem("music-player-theme") || "system",
   settings: {
-    targetLufs: -14
+    targetLufs: -14,
+    processingCores: 1,
+    availableCpuCount: 1
   },
   autoLevelEnabled: true,
   isUploading: false,
+  isConverting: false,
+  isPollingLibrary: false,
+  libraryPollHandle: null,
   audioContext: null,
-  sourceNode: null,
   inputGainNode: null,
-  compressorNode: null,
   eqNodes: [],
-  language: localStorage.getItem("music-player-language") || "en"
+  language: localStorage.getItem("music-player-language") || "zh",
+  conversionItems: []
 };
 
 const translations = {
   en: {
     pageTitle: "Liquid Glass Music Player",
+    langEn: "EN",
+    langZh: "中文",
     brandEyebrow: "Liquid Glass Audio",
+    themeEyebrow: "Theme",
+    themeSystem: "System",
+    themeLight: "Light",
+    themeDark: "Dark",
+    themeFollowMeta: "System follows your OS automatically. Light and dark can be forced here when needed.",
     navLibrary: "Library",
+    navPlaylists: "Playlists",
     navCustomize: "Customize",
     importEyebrow: "Import",
     dropzoneBadge: "Import",
     dropzoneTitle: "Drop tracks into your library",
     dropzoneMeta: "MP3, M4A, AAC",
-    uploadButtonIdle: "Import and Analyze",
-    uploadButtonBusy: "Importing...",
-    subnavPlayback: "Playback",
-    subnavEqualizer: "Equalizer",
-    libraryTitle: "Choose music from a full-screen listening layout",
-    libraryHero:
-      "The app now behaves like a mainstream music player: navigation on the left, full-size listening pages on the right.",
-    pillAdaptive: "Adaptive layout",
-    pillCustom: "Custom player",
-    pillApple: "Apple Music inspired",
-    nowPlayingEyebrow: "Now Playing",
-    mainPlaybackSurface: "Main playback surface",
+    libraryStats: "Library Stats",
     statsTracks: "Tracks",
     statsTracksMeta: "Total imported songs in your local library.",
+    statsPlaylists: "Playlists",
+    statsPlaylistsMeta: "Playlists created from your library selections.",
     statsAnalyzed: "Analyzed",
     statsAnalyzedMeta: "Tracks with integrated loudness data available.",
-    statsAverageLufs: "Average LUFS",
-    statsAverageLufsMeta: "Quick snapshot of your imported library loudness.",
     statsAutoLevel: "Auto level",
     statsAutoLevelMeta: "Playback compensation follows your current LUFS target.",
+    enabled: "Enabled",
+    disabled: "Disabled",
     musicEyebrow: "Music",
-    libraryMenuTitle: "Library Menu",
-    libraryMenuMeta: "Choose a song from the right-side content page just like a modern streaming app.",
+    libraryMenuTitle: "Library",
+    libraryMenuMeta: "Tap any song row to play.",
+    listColumnTrack: "Track",
+    listColumnArtist: "Artist",
+    listColumnDuration: "Duration",
+    listColumnSelect: "Select",
+    subnavPlayback: "Playback",
+    subnavEqualizer: "Equalizer",
+    subnavConverter: "Converter",
+    playlistsTitle: "Create and manage playlists",
+    playlistsMeta: "Choose songs here for your playlist builder.",
+    playlistAddButton: "Add Playlist",
+    playlistHideBuilder: "Hide Add Panel",
+    playlistBuilderTitle: "Add songs to a new playlist",
+    playlistBuilderMeta: "Open this panel only when you want to build a playlist.",
+    playlistName: "Playlist Name",
+    playlistNamePlaceholder: "My playlist",
+    createPlaylist: "Create Playlist",
+    selectedCount: "{count} selected",
+    selectedTracksTitle: "Selected tracks",
+    selectedTracksMeta: "These songs will be saved into the next playlist you create.",
+    playlistSourceTitle: "Choose tracks from library",
+    playlistSourceMeta: "Tap the checkbox or anywhere on a row to add songs.",
+    existingPlaylists: "Your playlists",
+    existingPlaylistsMeta: "Playlist cards show the name and track count. Tap one to open it.",
+    playlistTrackCount: "{count} tracks",
+    backToPlaylists: "Close",
+    emptySelectedTracks: "No tracks selected yet.",
+    emptyPlaylists: "No playlists yet.",
+    emptyPlaylistTracks: "This playlist does not contain any songs yet.",
     customizeTitle: "Tune playback behavior and EQ from one menu section",
-    customizeHero:
-      "Playback and equalizer settings now live under Customize instead of taking over the main player page.",
     playbackTitle: "Main listening controls",
     playbackMeta: "Adjust LUFS target and overall leveling behavior here.",
     targetLufs: "Target LUFS",
+    cpuCores: "CPU Cores",
+    cpuCoresMeta: "Choose how many CPU cores background analysis and batch conversion can use.",
+    cpuCoresReadout: "{used} / {total} cores",
+    savePlaybackSettingsButton: "Save Playback Settings",
     oneClickLeveling: "One-click leveling",
     enablePlaybackComp: "Enable playback compensation",
     usesMeasuredLoudness: "Uses measured loudness per track.",
     savedTarget: "Saved target",
     saveTargetButton: "Save Target LUFS",
     smartNote: "Smart note",
+    currentCompensation: "Current Compensation",
     eqTitle: "Glass EQ deck",
     eqMeta: "Adjust tone in real time without rewriting the source audio.",
     resetEqButton: "Reset Equalizer",
-    volume: "Volume",
-    none: "None",
-    enabled: "Enabled",
-    disabled: "Disabled",
+    converterTitle: "LUFS Converter",
+    converterMeta: "Select tracks here, bake in leveling, then download or overwrite them.",
+    converterSelected: "Selected Tracks",
+    converterSelectionMetaEmpty: "Pick songs below for conversion.",
+    converterSelectionMetaReady: "These tracks will use the current LUFS target and optional EQ curve.",
+    converterPickerTitle: "Choose tracks for conversion",
+    converterPickerMeta: "Select only the songs you want the LUFS converter to process.",
+    converterTarget: "Current Target",
+    converterTargetMeta: "The converter uses the same LUFS target you set in Playback.",
+    converterEq: "Bake EQ",
+    converterEqStrong: "Apply the current EQ curve",
+    converterEqMeta: "The exported file will use the current EQ and LUFS target together.",
+    downloadConverted: "Download Balanced Files",
+    overwriteConverted: "Overwrite Originals",
+    conversionReadyCount: "{count} selected",
+    conversionNoSelection: "Select at least one song in the converter before converting.",
+    conversionPreparingDownload: "Rendering balanced files for download...",
+    conversionPreparingOverwrite: "Overwriting the selected originals...",
+    conversionDownloadSuccess: "Balanced files are ready. If automatic downloads were blocked, use the links below.",
+    conversionOverwriteSuccess: "The selected files were overwritten and re-indexed successfully.",
+    conversionFailed: "Conversion failed.",
+    lowerTargetHint: "Lower targets keep more headroom and feel gentler across the whole library.",
+    higherTargetHint: "Higher targets sound louder and will reduce already hot masters more aggressively.",
+    defaultTargetHint: "Most streaming playback targets sit close to -14 LUFS.",
+    nowPlayingEyebrow: "Now Playing",
     noTrackSelected: "No track selected",
-    noTrackMeta: "Import tracks and choose one from the library menu.",
     bottomNoTrackMeta: "Choose a track from the library to start.",
-    unknownDuration: "Unknown duration",
-    lufsUnavailable: "LUFS analysis unavailable",
-    suggestedCompensation: "Suggested compensation {value} dB",
-    noTracksYet: "No tracks yet",
-    uploadSongsPrompt: "Upload a few songs and the server will analyze their loudness automatically.",
-    noAnalysis: "No analysis",
-    playing: "Playing",
+    liveLyrics: "Lyrics",
+    noLyrics: "No lyrics were found in this file.",
+    lyricsAwaiting: "Lyrics are still being read from this file.",
+    volume: "Volume",
     play: "Play",
     pause: "Pause",
-    measuredLoudnessMeta: "Measured loudness {lufs} LUFS, target {target} LUFS",
-    noLoudnessMeta: "This track does not have loudness analysis data.",
-    lowerTargetHint: "Lower targets preserve more headroom and feel gentler across the library.",
-    higherTargetHint: "This target is louder and will ask for more gain reduction on already hot masters.",
-    defaultTargetHint: "Most streaming playback targets sit close to -14 LUFS.",
+    unknownArtist: "Unknown Artist",
+    unknownDuration: "Unknown duration",
+    noTracksYet: "No tracks yet",
+    none: "None",
+    uploadSongsPrompt: "Upload a few songs and the server will process metadata, artwork, lyrics, and LUFS automatically.",
+    processingBadge: "Processing",
+    processingTrackMeta: "Reading metadata, artwork, lyrics, and LUFS in the background.",
+    processingShort: "Working",
     chooseAudioFiles: "Please choose at least one audio file.",
-    uploadingStatus: "Uploading and analyzing loudness. This may take a moment.",
+    uploadingStatus: "Uploading {current}/{total} files...",
     uploadFailed: "Upload failed. Please try again.",
-    importedStatus: "Imported {count} track(s) and finished loudness analysis.",
+    importedQueuedStatus: "{count} track(s) imported. Metadata and LUFS analysis are continuing in the background.",
+    importedPartialStatus: "{success} track(s) imported, {failed} failed. Metadata and LUFS analysis are continuing in the background.",
     saveFailed: "Save failed.",
     saveSuccess: "Target LUFS saved as {value}.",
+    playbackSettingsSaved: "Playback settings saved: {lufs} LUFS, {used}/{total} cores.",
     libraryLoadFailed: "Failed to load the library. Please refresh and try again.",
-    filesReady: "{count} file(s) ready to import"
+    playlistNameRequired: "Please enter a playlist name.",
+    playlistSelectionRequired: "Please select at least one track first.",
+    playlistCreateFailed: "Playlist creation failed.",
+    playlistCreated: "Playlist created successfully.",
+    noCompensation: "0.0 dB",
+    playbackBlocked: "Playback was blocked by the browser. Tap play again.",
+    fileCountReady: "{count} file(s) ready to import",
+    modeSequence: "Sequence",
+    modeShuffle: "Shuffle",
+    modeRepeatOne: "Repeat One",
+    playbackModeButtonLabel: "Playback mode: {mode}",
+    downloadLinkLabel: "Download",
+    previousTrack: "Previous track",
+    nextTrack: "Next track"
   },
   zh: {
-    pageTitle: "液态玻璃音乐播放器",
-    brandEyebrow: "液态玻璃音频",
+    pageTitle: "Liquid Glass 音乐播放器",
+    langEn: "EN",
+    langZh: "中文",
+    brandEyebrow: "Liquid Glass Audio",
+    themeEyebrow: "主题",
+    themeSystem: "跟随系统",
+    themeLight: "浅色",
+    themeDark: "深色",
+    themeFollowMeta: "默认会跟随系统，也可以在这里手动固定浅色或深色。",
     navLibrary: "音乐库",
+    navPlaylists: "播放列表",
     navCustomize: "自定义",
     importEyebrow: "导入",
     dropzoneBadge: "导入",
     dropzoneTitle: "把音乐拖进你的音乐库",
     dropzoneMeta: "支持 MP3、M4A、AAC",
-    uploadButtonIdle: "导入并分析",
-    uploadButtonBusy: "导入中...",
+    libraryStats: "音乐库数据",
+    statsTracks: "歌曲数",
+    statsTracksMeta: "当前本地音乐库里已导入的歌曲总数。",
+    statsPlaylists: "播放列表",
+    statsPlaylistsMeta: "根据音乐库歌曲创建的播放列表数量。",
+    statsAnalyzed: "已分析",
+    statsAnalyzedMeta: "已经拿到响度分析结果的歌曲数量。",
+    statsAutoLevel: "自动平衡",
+    statsAutoLevelMeta: "播放补偿会跟随你当前设置的 LUFS 目标。",
+    enabled: "已开启",
+    disabled: "已关闭",
+    musicEyebrow: "音乐",
+    libraryMenuTitle: "音乐库",
+    libraryMenuMeta: "点击任意歌曲整行即可播放。",
+    listColumnTrack: "歌曲",
+    listColumnArtist: "作者",
+    listColumnDuration: "时长",
+    listColumnSelect: "选择",
     subnavPlayback: "播放",
     subnavEqualizer: "均衡器",
-    libraryTitle: "在全屏沉浸式布局中选择音乐",
-    libraryHero: "现在的界面更像主流音乐软件：左边是导航菜单，右边是全尺寸内容页面。",
-    pillAdaptive: "自适应布局",
-    pillCustom: "自定义播放器",
-    pillApple: "Apple Music 风格",
-    nowPlayingEyebrow: "正在播放",
-    mainPlaybackSurface: "主播放区域",
-    statsTracks: "歌曲数",
-    statsTracksMeta: "本地音乐库中已导入的歌曲总数。",
-    statsAnalyzed: "已分析",
-    statsAnalyzedMeta: "已经拿到响度数据的歌曲数量。",
-    statsAverageLufs: "平均 LUFS",
-    statsAverageLufsMeta: "快速查看当前音乐库的平均响度。",
-    statsAutoLevel: "自动平衡",
-    statsAutoLevelMeta: "播放补偿会跟随你当前设定的 LUFS 目标。",
-    musicEyebrow: "音乐",
-    libraryMenuTitle: "音乐菜单",
-    libraryMenuMeta: "像现代流媒体播放器一样，在右侧内容区选择要播放的歌曲。",
-    customizeTitle: "在同一菜单中统一调整播放与 EQ",
-    customizeHero: "播放设置和均衡器都收纳到了自定义菜单里，不再占用主播放器页面。",
+    subnavConverter: "转换器",
+    playlistsTitle: "创建和管理播放列表",
+    playlistsMeta: "在这里挑选歌曲并整理你的播放列表。",
+    playlistAddButton: "添加播放列表",
+    playlistHideBuilder: "收起添加面板",
+    playlistBuilderTitle: "向新播放列表添加歌曲",
+    playlistBuilderMeta: "只有在需要创建播放列表时才展开这个面板。",
+    playlistName: "播放列表名称",
+    playlistNamePlaceholder: "我的播放列表",
+    createPlaylist: "创建播放列表",
+    selectedCount: "已选择 {count} 首",
+    selectedTracksTitle: "已选歌曲",
+    selectedTracksMeta: "这些歌曲会保存到你下一次创建的播放列表里。",
+    playlistSourceTitle: "从音乐库选择歌曲",
+    playlistSourceMeta: "点复选框，或者直接点整行，把歌曲加入播放列表。",
+    existingPlaylists: "你的播放列表",
+    existingPlaylistsMeta: "这里只显示名字和歌曲数量，点进去再看全部歌曲。",
+    playlistTrackCount: "{count} 首歌曲",
+    backToPlaylists: "收起",
+    emptySelectedTracks: "还没有选择歌曲。",
+    emptyPlaylists: "还没有播放列表。",
+    emptyPlaylistTracks: "这个播放列表里还没有歌曲。",
+    customizeTitle: "自定义",
     playbackTitle: "播放控制",
-    playbackMeta: "在这里调整目标 LUFS 和整体自动平衡行为。",
+    playbackMeta: "在这里调整目标 LUFS 和自动平衡行为。",
     targetLufs: "目标 LUFS",
+    cpuCores: "CPU 核心",
+    cpuCoresMeta: "选择后台分析和批量转换可使用的 CPU 核心数量。",
+    cpuCoresReadout: "{used} / {total} 核",
+    savePlaybackSettingsButton: "保存播放设置",
     oneClickLeveling: "一键平衡",
     enablePlaybackComp: "启用播放补偿",
-    usesMeasuredLoudness: "基于每首歌测得的响度进行补偿。",
+    usesMeasuredLoudness: "按照每首歌测得的响度自动补偿。",
     savedTarget: "已保存目标",
     saveTargetButton: "保存目标 LUFS",
     smartNote: "智能提示",
-    eqTitle: "玻璃感 EQ 面板",
-    eqMeta: "实时调节音色，不会改写原始音频文件。",
+    currentCompensation: "当前补偿",
+    eqTitle: "玻璃质感 EQ 面板",
+    eqMeta: "实时调整音色，不会改写原始音频文件。",
     resetEqButton: "重置均衡器",
-    volume: "音量",
-    none: "无",
-    enabled: "已开启",
-    disabled: "已关闭",
+    converterTitle: "LUFS 转换器",
+    converterMeta: "在这里选择要转换的歌曲，把当前响度目标和可选 EQ 烘焙进文件后再下载或覆盖。",
+    converterSelected: "已选歌曲",
+    converterSelectionMetaEmpty: "在下面选择要转换的歌曲。",
+    converterSelectionMetaReady: "这些歌曲会使用当前 LUFS 目标，以及可选的 EQ 曲线一起处理。",
+    converterPickerTitle: "选择要转换的歌曲",
+    converterPickerMeta: "只选择你想让 LUFS 转换器处理的歌曲。",
+    converterTarget: "当前目标",
+    converterTargetMeta: "转换器会使用 Playback 里同一个 LUFS 目标值。",
+    converterEq: "烘焙 EQ",
+    converterEqStrong: "应用当前 EQ 曲线",
+    converterEqMeta: "导出的音频会把现在的 EQ 和 LUFS 目标一起写进文件。",
+    downloadConverted: "下载平衡后的文件",
+    overwriteConverted: "覆盖原文件",
+    conversionReadyCount: "已选 {count} 首",
+    conversionNoSelection: "请先在转换器里至少选择一首歌，再来转换。",
+    conversionPreparingDownload: "正在生成可下载的平衡文件...",
+    conversionPreparingOverwrite: "正在覆盖你选中的原文件...",
+    conversionDownloadSuccess: "平衡后的文件已经准备好。如果浏览器拦截了自动下载，可以直接点下面的链接。",
+    conversionOverwriteSuccess: "选中的文件已经覆盖完成，并重新写回音乐库。",
+    conversionFailed: "转换失败。",
+    lowerTargetHint: "更低的目标会保留更多动态余量，整库听感会更柔和。",
+    higherTargetHint: "更高的目标会更响，也会对本来就偏热的母带施加更多衰减。",
+    defaultTargetHint: "大多数流媒体平台的播放目标都接近 -14 LUFS。",
+    nowPlayingEyebrow: "正在播放",
     noTrackSelected: "还没有选择歌曲",
-    noTrackMeta: "先导入音乐，然后从音乐库菜单里选择一首歌。",
-    bottomNoTrackMeta: "从音乐库里选择一首歌开始播放。",
-    unknownDuration: "未知时长",
-    lufsUnavailable: "暂无 LUFS 分析数据",
-    suggestedCompensation: "建议补偿 {value} dB",
-    noTracksYet: "还没有歌曲",
-    uploadSongsPrompt: "上传几首歌后，服务器会自动分析它们的响度。",
-    noAnalysis: "未分析",
-    playing: "播放中",
+    bottomNoTrackMeta: "从音乐库里点一首歌开始播放。",
+    liveLyrics: "歌词",
+    noLyrics: "这首歌里没有读到歌词。",
+    lyricsAwaiting: "正在从这首歌里读取歌词。",
+    volume: "音量",
     play: "播放",
     pause: "暂停",
-    measuredLoudnessMeta: "测得响度 {lufs} LUFS，当前目标 {target} LUFS",
-    noLoudnessMeta: "这首歌暂时没有响度分析数据。",
-    lowerTargetHint: "更低的目标值会保留更多动态余量，整体听感更柔和。",
-    higherTargetHint: "这个目标更响，会对已经很热的母带施加更多增益衰减。",
-    defaultTargetHint: "大多数流媒体平台的播放目标都接近 -14 LUFS。",
+    unknownArtist: "未知作者",
+    unknownDuration: "未知时长",
+    noTracksYet: "还没有歌曲",
+    none: "无",
+    uploadSongsPrompt: "先上传几首歌，服务器会自动处理元数据、封面、歌词和 LUFS。",
+    processingBadge: "处理中",
+    processingTrackMeta: "正在后台读取元数据、封面、歌词和 LUFS。",
+    processingShort: "处理中",
     chooseAudioFiles: "请至少选择一个音频文件。",
-    uploadingStatus: "正在上传并分析响度，请稍等片刻。",
+    uploadingStatus: "正在上传第 {current}/{total} 个文件...",
     uploadFailed: "上传失败，请重试。",
-    importedStatus: "已导入 {count} 首歌曲，并完成响度分析。",
+    importedQueuedStatus: "已导入 {count} 首歌曲，元数据和 LUFS 正在后台继续处理。",
+    importedPartialStatus: "成功导入 {success} 首，失败 {failed} 首，元数据和 LUFS 正在后台继续处理。",
     saveFailed: "保存失败。",
     saveSuccess: "目标 LUFS 已保存为 {value}。",
-    libraryLoadFailed: "音乐库加载失败，请刷新页面后重试。",
-    filesReady: "已有 {count} 个文件待导入"
+    playbackSettingsSaved: "播放设置已保存：{lufs} LUFS，CPU {used}/{total} 核。",
+    libraryLoadFailed: "音乐库加载失败，请刷新后重试。",
+    playlistNameRequired: "请先填写播放列表名称。",
+    playlistSelectionRequired: "请先至少选择一首歌曲。",
+    playlistCreateFailed: "创建播放列表失败。",
+    playlistCreated: "播放列表创建成功。",
+    noCompensation: "0.0 dB",
+    playbackBlocked: "浏览器阻止了自动播放，请再点一次播放。",
+    fileCountReady: "已有 {count} 个文件待导入",
+    modeSequence: "顺序播放",
+    modeShuffle: "随机播放",
+    modeRepeatOne: "单曲循环",
+    playbackModeButtonLabel: "播放模式：{mode}",
+    downloadLinkLabel: "下载",
+    previousTrack: "上一首",
+    nextTrack: "下一首"
   }
 };
 
+const playbackModeIcons = {
+  sequence: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 7h13"></path>
+      <path d="m13 4 4 3-4 3"></path>
+      <path d="M20 17H7"></path>
+      <path d="m11 14-4 3 4 3"></path>
+    </svg>
+  `,
+  shuffle: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M16 3h5v5"></path>
+      <path d="m21 3-8 8"></path>
+      <path d="M4 20l6-6"></path>
+      <path d="M4 4l6 6"></path>
+      <path d="m21 16-5 5"></path>
+      <path d="M16 21h5v-5"></path>
+    </svg>
+  `,
+  "repeat-one": `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M17 1l4 4-4 4"></path>
+      <path d="M3 11V7a2 2 0 0 1 2-2h16"></path>
+      <path d="m7 23-4-4 4-4"></path>
+      <path d="M21 13v4a2 2 0 0 1-2 2H3"></path>
+      <path d="M12 9v7"></path>
+      <path d="m10.5 10.5 1.5-1.5 1.5 1.5"></path>
+    </svg>
+  `
+};
+
+const transportIcons = {
+  play: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8 6.5v11l9-5.5z" fill="currentColor" stroke="none"></path>
+    </svg>
+  `,
+  pause: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="7" y="6" width="3.5" height="12" rx="1.5" fill="currentColor" stroke="none"></rect>
+      <rect x="13.5" y="6" width="3.5" height="12" rx="1.5" fill="currentColor" stroke="none"></rect>
+    </svg>
+  `,
+  previous: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M17 6v12"></path>
+      <path d="m15 18-8-6 8-6z" fill="currentColor" stroke="none"></path>
+    </svg>
+  `,
+  next: `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 6v12"></path>
+      <path d="m9 6 8 6-8 6z" fill="currentColor" stroke="none"></path>
+    </svg>
+  `
+};
+
 const eqBands = [
-  { key: "sub", label: "60Hz", type: "lowshelf", frequency: 60, gain: 0 },
-  { key: "low", label: "170Hz", type: "peaking", frequency: 170, q: 1, gain: 0 },
-  { key: "mid", label: "350Hz", type: "peaking", frequency: 350, q: 1, gain: 0 },
-  { key: "presence", label: "1kHz", type: "peaking", frequency: 1000, q: 1.1, gain: 0 },
-  { key: "air", label: "3.5kHz", type: "highshelf", frequency: 3500, gain: 0 }
+  { label: "60Hz", type: "lowshelf", frequency: 60, gain: 0 },
+  { label: "170Hz", type: "peaking", frequency: 170, q: 1, gain: 0 },
+  { label: "350Hz", type: "peaking", frequency: 350, q: 1, gain: 0 },
+  { label: "1kHz", type: "peaking", frequency: 1000, q: 1.1, gain: 0 },
+  { label: "3.5kHz", type: "highshelf", frequency: 3500, gain: 0 }
 ];
 
 const uploadForm = document.querySelector("#uploadForm");
 const fileInput = document.querySelector("#trackFiles");
 const uploadStatus = document.querySelector("#uploadStatus");
-const uploadButton = document.querySelector("#uploadButton");
+const uploadProgressWrap = document.querySelector("#uploadProgressWrap");
+const uploadProgressFill = document.querySelector("#uploadProgressFill");
+const uploadProgressLabel = document.querySelector("#uploadProgressLabel");
 const libraryEl = document.querySelector("#library");
+const playlistsEl = document.querySelector("#playlists");
+const selectedTracksList = document.querySelector("#selectedTracksList");
+const playlistTrackPicker = document.querySelector("#playlistTrackPicker");
+const converterTrackPicker = document.querySelector("#converterTrackPicker");
+const playlistDetailPanel = document.querySelector("#playlistDetailPanel");
+const playlistDetailTitle = document.querySelector("#playlistDetailTitle");
+const playlistDetailMeta = document.querySelector("#playlistDetailMeta");
+const playlistDetailTracks = document.querySelector("#playlistDetailTracks");
+const closePlaylistDetailButton = document.querySelector("#closePlaylistDetailButton");
+const togglePlaylistBuilderButton = document.querySelector("#togglePlaylistBuilderButton");
+const playlistBuilderPanel = document.querySelector("#playlistBuilderPanel");
 const navItems = document.querySelectorAll("[data-view]");
 const contentPanels = document.querySelectorAll(".content-panel");
 const customizeMenu = document.querySelector("#customizeMenu");
@@ -191,33 +406,51 @@ const audioPlayer = document.querySelector("#audioPlayer");
 const targetLufsSlider = document.querySelector("#targetLufs");
 const targetLufsReadout = document.querySelector("#targetLufsReadout");
 const targetLufsValue = document.querySelector("#targetLufsValue");
+const cpuCoresSlider = document.querySelector("#cpuCoresSlider");
+const cpuCoresReadout = document.querySelector("#cpuCoresReadout");
+const currentCompensationValue = document.querySelector("#currentCompensationValue");
 const autoLevelToggle = document.querySelector("#autoLevelToggle");
 const autoLevelState = document.querySelector("#autoLevelState");
 const saveLufsButton = document.querySelector("#saveLufsButton");
-const nowPlayingTitle = document.querySelector("#nowPlayingTitle");
-const nowPlayingMeta = document.querySelector("#nowPlayingMeta");
-const bottomNowPlayingTitle = document.querySelector("#bottomNowPlayingTitle");
-const bottomNowPlayingMeta = document.querySelector("#bottomNowPlayingMeta");
 const dropzone = document.querySelector("#dropzone");
 const dropzoneTitle = document.querySelector("#dropzoneTitle");
 const dropzoneMeta = document.querySelector("#dropzoneMeta");
 const eqControls = document.querySelector("#eqControls");
 const resetEqButton = document.querySelector("#resetEqButton");
 const trackCount = document.querySelector("#trackCount");
+const playlistCount = document.querySelector("#playlistCount");
 const analyzedCount = document.querySelector("#analyzedCount");
-const currentTrackDisplay = document.querySelector("#currentTrackDisplay");
-const averageLufs = document.querySelector("#averageLufs");
 const levelingHint = document.querySelector("#levelingHint");
 const playPauseButton = document.querySelector("#playPauseButton");
 const prevTrackButton = document.querySelector("#prevTrackButton");
 const nextTrackButton = document.querySelector("#nextTrackButton");
+const playbackModeButton = document.querySelector("#playbackModeButton");
 const seekBar = document.querySelector("#seekBar");
 const currentTimeLabel = document.querySelector("#currentTimeLabel");
 const durationLabel = document.querySelector("#durationLabel");
 const volumeSlider = document.querySelector("#volumeSlider");
-const recordDisc = document.querySelector("#recordDisc");
 const langEnButton = document.querySelector("#langEnButton");
 const langZhButton = document.querySelector("#langZhButton");
+const themeSystemButton = document.querySelector("#themeSystemButton");
+const themeLightButton = document.querySelector("#themeLightButton");
+const themeDarkButton = document.querySelector("#themeDarkButton");
+const playlistNameInput = document.querySelector("#playlistNameInput");
+const createPlaylistButton = document.querySelector("#createPlaylistButton");
+const playlistSelectionSummary = document.querySelector("#playlistSelectionSummary");
+const bottomArtworkImage = document.querySelector("#bottomArtworkImage");
+const bottomArtworkFallback = document.querySelector("#bottomArtworkFallback");
+const bottomNowPlayingTitle = document.querySelector("#bottomNowPlayingTitle");
+const bottomNowPlayingArtist = document.querySelector("#bottomNowPlayingArtist");
+const bottomNowPlayingMeta = document.querySelector("#bottomNowPlayingMeta");
+const liveLyricsBody = document.querySelector("#liveLyricsBody");
+const converterSelectionCount = document.querySelector("#converterSelectionCount");
+const converterSelectionMeta = document.querySelector("#converterSelectionMeta");
+const converterTargetValue = document.querySelector("#converterTargetValue");
+const applyEqToExportToggle = document.querySelector("#applyEqToExportToggle");
+const downloadConvertedButton = document.querySelector("#downloadConvertedButton");
+const overwriteConvertedButton = document.querySelector("#overwriteConvertedButton");
+const conversionStatus = document.querySelector("#conversionStatus");
+const conversionDownloads = document.querySelector("#conversionDownloads");
 
 let currentView = "library";
 let currentCustomizeView = "playback";
@@ -228,17 +461,17 @@ function t(key, vars = {}) {
   return template.replace(/\{(\w+)\}/g, (_match, token) => String(vars[token] ?? ""));
 }
 
-function applyTranslations() {
-  document.documentElement.lang = state.language === "zh" ? "zh-CN" : "en";
-  document.title = t("pageTitle");
-  document.querySelectorAll("[data-i18n]").forEach((element) => {
-    element.textContent = t(element.dataset.i18n);
-  });
-  uploadButton.textContent = state.isUploading ? t("uploadButtonBusy") : t("uploadButtonIdle");
-  saveLufsButton.textContent = t("saveTargetButton");
-  resetEqButton.textContent = t("resetEqButton");
-  langEnButton.classList.toggle("active", state.language === "en");
-  langZhButton.classList.toggle("active", state.language === "zh");
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function stripExtension(filename) {
+  return String(filename || "").replace(/\.[^./\\]+$/, "") || "track";
 }
 
 function formatDuration(seconds) {
@@ -252,41 +485,126 @@ function formatDuration(seconds) {
   return `${mins}:${String(secs).padStart(2, "0")}`;
 }
 
-function setUploadState(isUploading, message = "") {
-  state.isUploading = isUploading;
-  uploadButton.disabled = isUploading;
-  uploadButton.textContent = isUploading ? t("uploadButtonBusy") : t("uploadButtonIdle");
-  if (message) {
-    uploadStatus.textContent = message;
-  }
+function formatTrackType(track) {
+  return String(track.extension || "")
+    .replace(".", "")
+    .toUpperCase();
 }
 
-function formatGainComp(track) {
-  const integrated = track.analysis?.inputI;
-  if (!Number.isFinite(integrated)) {
-    return t("lufsUnavailable");
-  }
-
-  const delta = state.settings.targetLufs - integrated;
-  const formatted = `${delta > 0 ? "+" : ""}${delta.toFixed(1)}`;
-  return t("suggestedCompensation", { value: formatted });
+function normalizeTrack(track) {
+  const duration = Number(track.duration);
+  return {
+    ...track,
+    title: String(track.title || "").trim() || stripExtension(track.originalName || track.filename || "track"),
+    artist: String(track.artist || "").trim(),
+    lyrics: typeof track.lyrics === "string" ? track.lyrics.trim() : "",
+    coverUrl: typeof track.coverUrl === "string" && track.coverUrl.trim() ? track.coverUrl : "",
+    duration: Number.isFinite(duration) ? duration : null,
+    processing: Boolean(track.processing),
+    url: String(track.url || ""),
+    originalName: String(track.originalName || track.filename || ""),
+    extension: String(track.extension || ""),
+    uploadedAt: typeof track.uploadedAt === "string" ? track.uploadedAt : "",
+    processedAt: typeof track.processedAt === "string" ? track.processedAt : ""
+  };
 }
 
-function gainToLinear(db) {
-  return Math.pow(10, db / 20);
+function buildTrackStreamUrl(track) {
+  const revision = track.processedAt || track.uploadedAt || track.filename || Date.now();
+  return `${track.url}?v=${encodeURIComponent(revision)}`;
 }
 
 function getCurrentTrack() {
   return state.tracks.find((track) => track.id === state.currentTrackId) || null;
 }
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+function getTrackById(trackId) {
+  return state.tracks.find((track) => track.id === trackId) || null;
+}
+
+function getTrackArtist(track) {
+  return track?.artist || t("unknownArtist");
+}
+
+function getPlaylistById(playlistId) {
+  return state.playlists.find((playlist) => playlist.id === playlistId) || null;
+}
+
+function getActivePlaylist() {
+  return getPlaylistById(state.activePlaylistId);
+}
+
+function isTrackSelected(trackId) {
+  return state.selectedTrackIds.includes(trackId);
+}
+
+function isConverterTrackSelected(trackId) {
+  return state.converterSelectedTrackIds.includes(trackId);
+}
+
+function getPlaybackModeLabel(mode = state.playbackMode) {
+  if (mode === "shuffle") {
+    return t("modeShuffle");
+  }
+
+  if (mode === "repeat-one") {
+    return t("modeRepeatOne");
+  }
+
+  return t("modeSequence");
+}
+
+function setUploadProgress(percent) {
+  uploadProgressWrap.hidden = false;
+  uploadProgressFill.style.width = `${percent}%`;
+  uploadProgressLabel.textContent = `${Math.round(percent)}%`;
+}
+
+function resetUploadProgress() {
+  uploadProgressWrap.hidden = true;
+  uploadProgressFill.style.width = "0%";
+  uploadProgressLabel.textContent = "0%";
+}
+
+function coverMarkup(track, className = "track-art") {
+  if (track?.coverUrl) {
+    return `<img class="${className}" src="${track.coverUrl}" alt="${escapeHtml(track.title || "artwork")}" />`;
+  }
+
+  return `<div class="${className}-placeholder">MP3</div>`;
+}
+
+function libraryNeedsPolling() {
+  return state.tracks.some((track) => track.processing);
+}
+
+function syncLibraryPolling() {
+  if (libraryNeedsPolling()) {
+    if (!state.libraryPollHandle) {
+      state.libraryPollHandle = window.setInterval(async () => {
+        if (state.isPollingLibrary || state.isUploading || state.isConverting) {
+          return;
+        }
+
+        state.isPollingLibrary = true;
+
+        try {
+          await fetchLibrary({ preserveStatus: true });
+        } catch {
+          // Keep the current UI state and try again later.
+        } finally {
+          state.isPollingLibrary = false;
+        }
+      }, 2200);
+    }
+
+    return;
+  }
+
+  if (state.libraryPollHandle) {
+    window.clearInterval(state.libraryPollHandle);
+    state.libraryPollHandle = null;
+  }
 }
 
 function renderNavigation() {
@@ -298,128 +616,448 @@ function renderNavigation() {
     panel.classList.toggle("active", panel.id === `${currentView}View`);
   });
 
-  customizeMenu.style.display = currentView === "customize" ? "grid" : "none";
+  customizeMenu.hidden = currentView !== "customize";
 
   customizeItems.forEach((item) => {
     item.classList.toggle("active", item.dataset.customizeView === currentCustomizeView);
   });
 
   customizePanels.forEach((panel) => {
-    panel.classList.toggle("active", panel.id === `${currentCustomizeView}Panel`);
+    panel.classList.add("active");
+    panel.classList.toggle("is-current", panel.id === `${currentCustomizeView}Panel`);
   });
 }
 
-function renderLibrary() {
-  if (!state.tracks.length) {
-    libraryEl.innerHTML = `
-      <div class="track-card">
-        <div class="track-main">
-          <strong>${escapeHtml(t("noTracksYet"))}</strong>
-          <span class="track-meta">${escapeHtml(t("uploadSongsPrompt"))}</span>
-        </div>
-      </div>
-    `;
-    return;
+function renderThemeButtons() {
+  themeSystemButton.classList.toggle("active", state.theme === "system");
+  themeLightButton.classList.toggle("active", state.theme === "light");
+  themeDarkButton.classList.toggle("active", state.theme === "dark");
+}
+
+function applyTheme() {
+  if (state.theme === "system") {
+    delete document.documentElement.dataset.theme;
+  } else {
+    document.documentElement.dataset.theme = state.theme;
   }
 
-  libraryEl.innerHTML = state.tracks
-    .map((track) => {
-      const isActive = track.id === state.currentTrackId;
-      const integrated = track.analysis?.inputI;
-      const pillClass = Number.isFinite(integrated) ? "good" : "warn";
-      const lufsText = Number.isFinite(integrated) ? `${integrated.toFixed(1)} LUFS` : t("noAnalysis");
+  renderThemeButtons();
+}
 
-      return `
-        <article class="track-card ${isActive ? "active" : ""}">
-          <div class="track-main">
-            <div class="track-title-row">
-              <strong>${escapeHtml(track.title)}</strong>
-              <span class="pill ${pillClass}">${escapeHtml(lufsText)}</span>
-            </div>
-            <span class="track-meta">${escapeHtml(track.originalName)} | ${escapeHtml(formatDuration(track.duration))}</span>
-            <span class="track-analysis">${escapeHtml(formatGainComp(track))}</span>
-          </div>
-          <button class="track-play" data-track-id="${track.id}">${isActive ? t("playing") : t("play")}</button>
-        </article>
-      `;
-    })
-    .join("");
+function setTheme(theme) {
+  state.theme = ["system", "light", "dark"].includes(theme) ? theme : "system";
+  localStorage.setItem("music-player-theme", state.theme);
+  applyTheme();
+}
 
-  document.querySelectorAll("[data-track-id]").forEach((button) => {
-    button.addEventListener("click", () => {
-      currentView = "library";
-      renderNavigation();
-      playTrack(button.dataset.trackId);
-    });
+function updateSelectionSummary() {
+  playlistSelectionSummary.textContent = t("selectedCount", {
+    count: state.selectedTrackIds.length
   });
 }
 
 function renderOverview() {
   const analyzedTracks = state.tracks.filter((track) => Number.isFinite(track.analysis?.inputI));
-  const average =
-    analyzedTracks.reduce((sum, track) => sum + track.analysis.inputI, 0) / (analyzedTracks.length || 1);
-  const currentTrack = getCurrentTrack();
-
   trackCount.textContent = String(state.tracks.length);
+  playlistCount.textContent = String(state.playlists.length);
   analyzedCount.textContent = String(analyzedTracks.length);
-  currentTrackDisplay.textContent = currentTrack ? currentTrack.title : t("none");
-  averageLufs.textContent = analyzedTracks.length ? `${average.toFixed(1)} LUFS` : "--";
 }
 
-function renderNowPlaying(track = null) {
+function getBottomTrackMeta(track) {
+  if (track.processing) {
+    return t("processingTrackMeta");
+  }
+
+  const parts = [];
+
+  if (track.artist) {
+    parts.push(track.artist);
+  }
+
+  if (Number.isFinite(track.duration)) {
+    parts.push(formatDuration(track.duration));
+  }
+
+  const fileType = formatTrackType(track);
+  if (fileType) {
+    parts.push(fileType);
+  }
+
+  return parts.join(" / ") || t("bottomNoTrackMeta");
+}
+
+function getLyricsText(track) {
   if (!track) {
-    nowPlayingTitle.textContent = t("noTrackSelected");
-    nowPlayingMeta.textContent = t("noTrackMeta");
+    return t("noLyrics");
+  }
+
+  if (track.lyrics) {
+    return track.lyrics;
+  }
+
+  return track.processing ? t("lyricsAwaiting") : t("noLyrics");
+}
+
+function renderBottomPlayer(track = null) {
+  if (!track) {
     bottomNowPlayingTitle.textContent = t("noTrackSelected");
+    bottomNowPlayingArtist.textContent = t("unknownArtist");
     bottomNowPlayingMeta.textContent = t("bottomNoTrackMeta");
-    playPauseButton.textContent = t("play");
-    currentTimeLabel.textContent = "0:00";
-    durationLabel.textContent = "0:00";
-    seekBar.value = "0";
+    liveLyricsBody.textContent = t("noLyrics");
+    bottomArtworkImage.hidden = true;
+    bottomArtworkFallback.hidden = false;
     return;
   }
 
-  const meta = Number.isFinite(track.analysis?.inputI)
-    ? t("measuredLoudnessMeta", { lufs: track.analysis.inputI.toFixed(1), target: state.settings.targetLufs })
-    : t("noLoudnessMeta");
-
-  nowPlayingTitle.textContent = track.title;
-  nowPlayingMeta.textContent = meta;
   bottomNowPlayingTitle.textContent = track.title;
-  bottomNowPlayingMeta.textContent = meta;
-}
+  bottomNowPlayingArtist.textContent = getTrackArtist(track);
+  bottomNowPlayingMeta.textContent = getBottomTrackMeta(track);
+  liveLyricsBody.textContent = getLyricsText(track);
 
-function renderPlayState() {
-  const hasTrack = Boolean(getCurrentTrack());
-  playPauseButton.textContent = audioPlayer.paused || !hasTrack ? t("play") : t("pause");
-  recordDisc.style.animationPlayState = audioPlayer.paused ? "paused" : "running";
-}
-
-function updateTimeline() {
-  const currentTime = Number.isFinite(audioPlayer.currentTime) ? audioPlayer.currentTime : 0;
-  const duration = Number.isFinite(audioPlayer.duration) ? audioPlayer.duration : 0;
-  currentTimeLabel.textContent = formatDuration(currentTime);
-  durationLabel.textContent = duration > 0 ? formatDuration(duration) : "0:00";
-
-  if (duration > 0) {
-    seekBar.value = String(Math.round((currentTime / duration) * 1000));
+  if (track.coverUrl) {
+    bottomArtworkImage.src = track.coverUrl;
+    bottomArtworkImage.alt = track.title || "Artwork";
+    bottomArtworkImage.hidden = false;
+    bottomArtworkFallback.hidden = true;
   } else {
-    seekBar.value = "0";
+    bottomArtworkImage.hidden = true;
+    bottomArtworkFallback.hidden = false;
   }
 }
 
-function getTrackIndex(trackId) {
-  return state.tracks.findIndex((track) => track.id === trackId);
-}
+function renderCurrentCompensation() {
+  const integrated = getCurrentTrack()?.analysis?.inputI;
 
-async function playAdjacentTrack(direction) {
-  if (!state.tracks.length) {
+  if (!state.autoLevelEnabled || !Number.isFinite(integrated)) {
+    currentCompensationValue.textContent = t("noCompensation");
     return;
   }
 
-  const currentIndex = getTrackIndex(state.currentTrackId);
-  const safeIndex = currentIndex === -1 ? 0 : (currentIndex + direction + state.tracks.length) % state.tracks.length;
-  await playTrack(state.tracks[safeIndex].id);
+  const delta = state.settings.targetLufs - integrated;
+  const prefix = delta > 0 ? "+" : "";
+  currentCompensationValue.textContent = `${prefix}${delta.toFixed(1)} dB`;
+}
+
+function buildTrackMetaMarkup(track) {
+  return `
+    <div class="track-meta-row">
+      <span class="track-meta">${escapeHtml(track.originalName || track.title)}</span>
+      ${track.processing ? `<span class="track-status-pill">${escapeHtml(t("processingBadge"))}</span>` : ""}
+    </div>
+  `;
+}
+
+function buildTrackRow(track, { active = false, dataAttr = "data-row-track-id" } = {}) {
+  const durationLabel = track.processing && !Number.isFinite(track.duration) ? t("processingShort") : formatDuration(track.duration);
+
+  return `
+    <article class="track-row track-row-library glass-inline-card ${active ? "active" : ""}" ${dataAttr}="${track.id}">
+      <div class="track-main">
+        ${coverMarkup(track)}
+        <div class="track-text">
+          <strong class="track-title">${escapeHtml(track.title)}</strong>
+          ${buildTrackMetaMarkup(track)}
+        </div>
+      </div>
+      <span class="track-artist">${escapeHtml(getTrackArtist(track))}</span>
+      <span class="track-duration">${escapeHtml(durationLabel)}</span>
+    </article>
+  `;
+}
+
+function renderLibrary() {
+  if (!state.tracks.length) {
+    libraryEl.innerHTML = `
+      <article class="track-row track-row-library glass-inline-card empty-state-card">
+        <div class="track-main">
+          <div class="track-art-placeholder">MP3</div>
+          <div class="track-text">
+            <strong class="track-title">${escapeHtml(t("noTracksYet"))}</strong>
+            <span class="track-meta">${escapeHtml(t("uploadSongsPrompt"))}</span>
+          </div>
+        </div>
+        <span class="track-artist">${escapeHtml(t("none"))}</span>
+        <span class="track-duration">${escapeHtml(t("none"))}</span>
+      </article>
+    `;
+    return;
+  }
+
+  libraryEl.innerHTML = state.tracks
+    .map((track) => buildTrackRow(track, { active: track.id === state.currentTrackId }))
+    .join("");
+
+  document.querySelectorAll("[data-row-track-id]").forEach((row) => {
+    row.addEventListener("click", async () => {
+      await playTrack(row.dataset.rowTrackId);
+    });
+  });
+}
+
+function renderSelectedTracks() {
+  if (!state.selectedTrackIds.length) {
+    selectedTracksList.innerHTML = `<div class="selected-track-empty">${escapeHtml(t("emptySelectedTracks"))}</div>`;
+    return;
+  }
+
+  selectedTracksList.innerHTML = state.selectedTrackIds
+    .map((trackId) => getTrackById(trackId))
+    .filter(Boolean)
+    .map(
+      (track) => `
+        <article class="selected-track-chip">
+          ${coverMarkup(track, "selected-track-art")}
+          <div class="selected-track-copy">
+            <strong>${escapeHtml(track.title)}</strong>
+            <small>${escapeHtml(getTrackArtist(track))}</small>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderPlaylistBuilder() {
+  if (!playlistBuilderPanel || !togglePlaylistBuilderButton) {
+    return;
+  }
+
+  playlistBuilderPanel.hidden = !state.playlistBuilderOpen;
+  togglePlaylistBuilderButton.textContent = state.playlistBuilderOpen ? t("playlistHideBuilder") : t("playlistAddButton");
+}
+
+function buildPlaylistCoverMarkup(playlist) {
+  const coverTracks = playlist.trackIds.map((trackId) => getTrackById(trackId)).filter(Boolean).slice(0, 4);
+  const fallbackLabel = escapeHtml(String(playlist.name || "♪").trim().slice(0, 1) || "♪");
+
+  return `
+    <div class="playlist-cover-collage" aria-hidden="true">
+      ${Array.from({ length: 4 }, (_item, index) => {
+        const track = coverTracks[index];
+        if (track?.coverUrl) {
+          return `<img class="playlist-cover-tile" src="${track.coverUrl}" alt="${escapeHtml(track.title || playlist.name)}" />`;
+        }
+
+        return `<div class="playlist-cover-tile playlist-cover-fallback">${fallbackLabel}</div>`;
+      }).join("")}
+    </div>
+  `;
+}
+
+function toggleTrackSelection(trackId, shouldSelect) {
+  if (shouldSelect) {
+    state.selectedTrackIds = [...new Set([...state.selectedTrackIds, trackId])];
+  } else {
+    state.selectedTrackIds = state.selectedTrackIds.filter((id) => id !== trackId);
+  }
+
+  updateSelectionSummary();
+  renderSelectedTracks();
+  renderPlaylistTrackPicker();
+}
+
+function toggleConverterTrackSelection(trackId, shouldSelect) {
+  if (shouldSelect) {
+    state.converterSelectedTrackIds = [...new Set([...state.converterSelectedTrackIds, trackId])];
+  } else {
+    state.converterSelectedTrackIds = state.converterSelectedTrackIds.filter((id) => id !== trackId);
+  }
+
+  renderConverterTrackPicker();
+  renderConverterSummary();
+}
+
+function renderPlaylistTrackPicker() {
+  if (!state.tracks.length) {
+    playlistTrackPicker.innerHTML = `
+      <article class="track-row picker-row glass-inline-card empty-state-card">
+        <div class="track-select"></div>
+        <div class="track-main">
+          <div class="track-art-placeholder">MP3</div>
+          <div class="track-text">
+            <strong class="track-title">${escapeHtml(t("noTracksYet"))}</strong>
+            <span class="track-meta">${escapeHtml(t("uploadSongsPrompt"))}</span>
+          </div>
+        </div>
+        <span class="track-artist">${escapeHtml(t("none"))}</span>
+        <span class="track-duration">${escapeHtml(t("none"))}</span>
+      </article>
+    `;
+    return;
+  }
+
+  playlistTrackPicker.innerHTML = state.tracks
+    .map((track) => {
+      const durationLabel = track.processing && !Number.isFinite(track.duration) ? t("processingShort") : formatDuration(track.duration);
+
+      return `
+        <article class="track-row picker-row glass-inline-card" data-picker-track-id="${track.id}">
+          <div class="track-select">
+            <input class="playlist-checkbox" type="checkbox" data-select-track-id="${track.id}" ${isTrackSelected(track.id) ? "checked" : ""} />
+          </div>
+          <div class="track-main">
+            ${coverMarkup(track)}
+            <div class="track-text">
+              <strong class="track-title">${escapeHtml(track.title)}</strong>
+              ${buildTrackMetaMarkup(track)}
+            </div>
+          </div>
+          <span class="track-artist">${escapeHtml(getTrackArtist(track))}</span>
+          <span class="track-duration">${escapeHtml(durationLabel)}</span>
+        </article>
+      `;
+    })
+    .join("");
+
+  document.querySelectorAll("[data-select-track-id]").forEach((checkbox) => {
+    checkbox.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+
+    checkbox.addEventListener("change", (event) => {
+      toggleTrackSelection(event.currentTarget.dataset.selectTrackId, event.currentTarget.checked);
+    });
+  });
+
+  document.querySelectorAll("[data-picker-track-id]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const checkbox = row.querySelector("[data-select-track-id]");
+      checkbox.checked = !checkbox.checked;
+      toggleTrackSelection(row.dataset.pickerTrackId, checkbox.checked);
+    });
+  });
+}
+
+function renderConverterTrackPicker() {
+  if (!converterTrackPicker) {
+    return;
+  }
+
+  if (!state.tracks.length) {
+    converterTrackPicker.innerHTML = `
+      <article class="track-row picker-row glass-inline-card empty-state-card">
+        <div class="track-select"></div>
+        <div class="track-main">
+          <div class="track-art-placeholder">MP3</div>
+          <div class="track-text">
+            <strong class="track-title">${escapeHtml(t("noTracksYet"))}</strong>
+            <span class="track-meta">${escapeHtml(t("uploadSongsPrompt"))}</span>
+          </div>
+        </div>
+        <span class="track-artist">${escapeHtml(t("none"))}</span>
+        <span class="track-duration">${escapeHtml(t("none"))}</span>
+      </article>
+    `;
+    return;
+  }
+
+  converterTrackPicker.innerHTML = state.tracks
+    .map((track) => {
+      const durationLabel = track.processing && !Number.isFinite(track.duration) ? t("processingShort") : formatDuration(track.duration);
+
+      return `
+        <article class="track-row picker-row glass-inline-card" data-converter-track-id="${track.id}">
+          <div class="track-select">
+            <input class="playlist-checkbox" type="checkbox" data-converter-select-track-id="${track.id}" ${isConverterTrackSelected(track.id) ? "checked" : ""} />
+          </div>
+          <div class="track-main">
+            ${coverMarkup(track)}
+            <div class="track-text">
+              <strong class="track-title">${escapeHtml(track.title)}</strong>
+              ${buildTrackMetaMarkup(track)}
+            </div>
+          </div>
+          <span class="track-artist">${escapeHtml(getTrackArtist(track))}</span>
+          <span class="track-duration">${escapeHtml(durationLabel)}</span>
+        </article>
+      `;
+    })
+    .join("");
+
+  document.querySelectorAll("[data-converter-select-track-id]").forEach((checkbox) => {
+    checkbox.addEventListener("click", (event) => {
+      event.stopPropagation();
+    });
+
+    checkbox.addEventListener("change", (event) => {
+      toggleConverterTrackSelection(event.currentTarget.dataset.converterSelectTrackId, event.currentTarget.checked);
+    });
+  });
+
+  document.querySelectorAll("[data-converter-track-id]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const checkbox = row.querySelector("[data-converter-select-track-id]");
+      checkbox.checked = !checkbox.checked;
+      toggleConverterTrackSelection(row.dataset.converterTrackId, checkbox.checked);
+    });
+  });
+}
+
+function renderPlaylistDetail() {
+  const activePlaylist = getActivePlaylist();
+
+  if (!activePlaylist) {
+    playlistDetailPanel.hidden = true;
+    playlistDetailTitle.textContent = "";
+    playlistDetailMeta.textContent = "";
+    playlistDetailTracks.innerHTML = "";
+    return;
+  }
+
+  const tracks = activePlaylist.trackIds.map((trackId) => getTrackById(trackId)).filter(Boolean);
+  playlistDetailPanel.hidden = false;
+  playlistDetailTitle.textContent = activePlaylist.name;
+  playlistDetailMeta.textContent = t("playlistTrackCount", { count: tracks.length });
+
+  if (!tracks.length) {
+    playlistDetailTracks.innerHTML = `<div class="selected-track-empty">${escapeHtml(t("emptyPlaylistTracks"))}</div>`;
+    return;
+  }
+
+  playlistDetailTracks.innerHTML = tracks
+    .map((track) => buildTrackRow(track, { active: track.id === state.currentTrackId, dataAttr: "data-playlist-track-id" }))
+    .join("");
+
+  document.querySelectorAll("[data-playlist-track-id]").forEach((row) => {
+    row.addEventListener("click", async () => {
+      await playTrack(row.dataset.playlistTrackId);
+    });
+  });
+}
+
+function renderPlaylists() {
+  if (!state.playlists.length) {
+    playlistsEl.innerHTML = `<div class="selected-track-empty">${escapeHtml(t("emptyPlaylists"))}</div>`;
+    renderPlaylistDetail();
+    return;
+  }
+
+  playlistsEl.innerHTML = state.playlists
+    .map((playlist) => {
+      const activeClass = playlist.id === state.activePlaylistId ? "active" : "";
+
+      return `
+        <button class="playlist-card glass-inline-card ${activeClass}" type="button" data-open-playlist-id="${playlist.id}">
+          <div class="playlist-card-head">
+            ${buildPlaylistCoverMarkup(playlist)}
+            <div class="playlist-copy">
+              <strong>${escapeHtml(playlist.name)}</strong>
+              <small>${escapeHtml(t("playlistTrackCount", { count: playlist.trackIds.length }))}</small>
+            </div>
+          </div>
+        </button>
+      `;
+    })
+    .join("");
+
+  document.querySelectorAll("[data-open-playlist-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.activePlaylistId = button.dataset.openPlaylistId;
+      renderPlaylists();
+    });
+  });
+
+  renderPlaylistDetail();
 }
 
 function renderTargetLufs() {
@@ -427,6 +1065,7 @@ function renderTargetLufs() {
   targetLufsSlider.value = String(state.settings.targetLufs);
   targetLufsReadout.textContent = value;
   targetLufsValue.textContent = value;
+  converterTargetValue.textContent = value;
 
   if (state.settings.targetLufs < -14) {
     levelingHint.textContent = t("lowerTargetHint");
@@ -437,9 +1076,103 @@ function renderTargetLufs() {
   }
 }
 
+function renderProcessingCores() {
+  const totalCores = Math.max(1, Number(state.settings.availableCpuCount) || 1);
+  const processingCores = Math.max(1, Math.min(totalCores, Number(state.settings.processingCores) || 1));
+
+  state.settings.processingCores = processingCores;
+  cpuCoresSlider.max = String(totalCores);
+  cpuCoresSlider.value = String(processingCores);
+  cpuCoresReadout.textContent = t("cpuCoresReadout", {
+    used: processingCores,
+    total: totalCores
+  });
+}
+
 function renderAutoLevelState() {
   autoLevelToggle.checked = state.autoLevelEnabled;
   autoLevelState.textContent = state.autoLevelEnabled ? t("enabled") : t("disabled");
+}
+
+function renderPlaybackModeButton() {
+  playbackModeButton.innerHTML = playbackModeIcons[state.playbackMode] || playbackModeIcons.sequence;
+  const label = t("playbackModeButtonLabel", {
+    mode: getPlaybackModeLabel()
+  });
+  playbackModeButton.title = label;
+  playbackModeButton.setAttribute("aria-label", label);
+}
+
+function renderPlayState() {
+  const hasTrack = Boolean(getCurrentTrack());
+  const isPaused = audioPlayer.paused || !hasTrack;
+  const playLabel = isPaused ? t("play") : t("pause");
+
+  playPauseButton.innerHTML = isPaused ? transportIcons.play : transportIcons.pause;
+  playPauseButton.title = playLabel;
+  playPauseButton.setAttribute("aria-label", playLabel);
+
+  prevTrackButton.innerHTML = transportIcons.previous;
+  prevTrackButton.title = t("previousTrack");
+  prevTrackButton.setAttribute("aria-label", t("previousTrack"));
+
+  nextTrackButton.innerHTML = transportIcons.next;
+  nextTrackButton.title = t("nextTrack");
+  nextTrackButton.setAttribute("aria-label", t("nextTrack"));
+}
+
+function updateTimeline() {
+  const currentTime = Number.isFinite(audioPlayer.currentTime) ? audioPlayer.currentTime : 0;
+  const duration = Number.isFinite(audioPlayer.duration) ? audioPlayer.duration : 0;
+  currentTimeLabel.textContent = formatDuration(currentTime);
+  durationLabel.textContent = duration > 0 ? formatDuration(duration) : "0:00";
+  seekBar.value = duration > 0 ? String(Math.round((currentTime / duration) * 1000)) : "0";
+}
+
+function renderConverterDownloads(items = state.conversionItems) {
+  if (!items.length) {
+    conversionDownloads.innerHTML = "";
+    return;
+  }
+
+  conversionDownloads.innerHTML = items
+    .map(
+      (item) => `
+        <div class="download-link glass-inline-card">
+          <span>${escapeHtml(item.title || item.fileName)}</span>
+          <a href="${item.downloadUrl}" download="${escapeHtml(item.fileName)}">${escapeHtml(t("downloadLinkLabel"))}</a>
+        </div>
+      `
+    )
+    .join("");
+}
+
+function renderConverterSummary() {
+  converterSelectionCount.textContent = t("conversionReadyCount", {
+    count: state.converterSelectedTrackIds.length
+  });
+  converterSelectionMeta.textContent = state.converterSelectedTrackIds.length ? t("converterSelectionMetaReady") : t("converterSelectionMetaEmpty");
+}
+
+function applyTranslations() {
+  document.documentElement.lang = state.language === "zh" ? "zh-CN" : "en";
+  document.title = t("pageTitle");
+
+  document.querySelectorAll("[data-i18n]").forEach((element) => {
+    element.textContent = t(element.dataset.i18n);
+  });
+
+  playlistNameInput.placeholder = t("playlistNamePlaceholder");
+  langEnButton.classList.toggle("active", state.language === "en");
+  langZhButton.classList.toggle("active", state.language === "zh");
+  renderThemeButtons();
+  renderProcessingCores();
+  renderPlaybackModeButton();
+  renderPlayState();
+  renderConverterSummary();
+  renderConverterTrackPicker();
+  renderConverterDownloads();
+  renderPlaylistBuilder();
 }
 
 async function ensureAudioGraph() {
@@ -467,26 +1200,32 @@ async function ensureAudioGraph() {
     node.type = band.type;
     node.frequency.value = band.frequency;
     node.gain.value = band.gain;
+
     if (band.q) {
       node.Q.value = band.q;
     }
+
     return node;
   });
 
   source.connect(inputGain);
   let chainHead = inputGain;
+
   eqNodes.forEach((node) => {
     chainHead.connect(node);
     chainHead = node;
   });
+
   chainHead.connect(compressor);
   compressor.connect(context.destination);
 
   state.audioContext = context;
-  state.sourceNode = source;
   state.inputGainNode = inputGain;
-  state.compressorNode = compressor;
   state.eqNodes = eqNodes;
+}
+
+function gainToLinear(db) {
+  return Math.pow(10, db / 20);
 }
 
 function applyTrackLeveling() {
@@ -494,32 +1233,38 @@ function applyTrackLeveling() {
     return;
   }
 
-  const currentTrack = getCurrentTrack();
-  const integrated = currentTrack?.analysis?.inputI;
+  const integrated = getCurrentTrack()?.analysis?.inputI;
 
   if (!state.autoLevelEnabled || !Number.isFinite(integrated)) {
     state.inputGainNode.gain.value = 1;
     return;
   }
 
-  const delta = state.settings.targetLufs - integrated;
-  state.inputGainNode.gain.value = gainToLinear(delta);
+  state.inputGainNode.gain.value = gainToLinear(state.settings.targetLufs - integrated);
 }
 
 async function playTrack(trackId) {
-  const track = state.tracks.find((item) => item.id === trackId);
-  if (!track) {
+  const track = getTrackById(trackId);
+
+  if (!track || !track.url) {
     return;
   }
 
   await ensureAudioGraph();
   state.currentTrackId = track.id;
-  audioPlayer.src = track.url;
-  renderNowPlaying(track);
+  audioPlayer.src = buildTrackStreamUrl(track);
+  renderBottomPlayer(track);
   applyTrackLeveling();
+  renderCurrentCompensation();
   renderLibrary();
-  renderOverview();
-  await audioPlayer.play();
+  renderPlaylists();
+
+  try {
+    await audioPlayer.play();
+  } catch (error) {
+    uploadStatus.textContent = error?.message || t("playbackBlocked");
+  }
+
   renderPlayState();
 }
 
@@ -540,8 +1285,10 @@ function buildEqControls() {
     input.addEventListener("input", async (event) => {
       const index = Number(event.currentTarget.dataset.eqIndex);
       const value = Number(event.currentTarget.value);
+
       eqBands[index].gain = value;
       document.querySelector(`#eq-value-${index}`).textContent = `${value} dB`;
+
       await ensureAudioGraph();
       state.eqNodes[index].gain.value = value;
     });
@@ -549,93 +1296,357 @@ function buildEqControls() {
 }
 
 function setLanguage(language) {
-  state.language = language === "zh" ? "zh" : "en";
+  state.language = language === "en" ? "en" : "zh";
   localStorage.setItem("music-player-language", state.language);
+  rerenderAll();
+}
+
+function cyclePlaybackMode() {
+  const order = ["sequence", "shuffle", "repeat-one"];
+  const currentIndex = order.indexOf(state.playbackMode);
+  const nextMode = order[(currentIndex + 1) % order.length];
+  state.playbackMode = nextMode;
+  localStorage.setItem("music-player-playback-mode", nextMode);
+  renderPlaybackModeButton();
+}
+
+function rerenderAll() {
   applyTranslations();
+  applyTheme();
   renderTargetLufs();
+  renderProcessingCores();
   renderAutoLevelState();
-  renderLibrary();
   renderOverview();
-  renderNowPlaying(getCurrentTrack());
+  renderLibrary();
+  renderSelectedTracks();
+  renderPlaylistTrackPicker();
+  renderConverterTrackPicker();
+  renderPlaylists();
+  renderPlaylistBuilder();
+  renderBottomPlayer(getCurrentTrack());
+  renderCurrentCompensation();
   renderPlayState();
+  updateSelectionSummary();
   updateDropzoneText();
+  renderNavigation();
 }
 
-async function fetchLibrary() {
+async function fetchLibrary({ preserveStatus = false } = {}) {
   const response = await fetch("/api/library");
-  const payload = await response.json();
-  state.tracks = payload.tracks || [];
-  state.settings = payload.settings || state.settings;
-  renderTargetLufs();
-  renderLibrary();
-  renderOverview();
-  renderNowPlaying(getCurrentTrack());
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(payload.error || t("libraryLoadFailed"));
+  }
+
+  state.tracks = Array.isArray(payload.tracks) ? payload.tracks.map(normalizeTrack) : [];
+  state.playlists = Array.isArray(payload.playlists) ? payload.playlists : [];
+  state.settings = {
+    ...state.settings,
+    ...(payload.settings || {})
+  };
+  state.selectedTrackIds = state.selectedTrackIds.filter((trackId) => state.tracks.some((track) => track.id === trackId));
+  state.converterSelectedTrackIds = state.converterSelectedTrackIds.filter((trackId) => state.tracks.some((track) => track.id === trackId));
+
+  if (state.activePlaylistId && !getActivePlaylist()) {
+    state.activePlaylistId = null;
+  }
+
+  if (state.currentTrackId && !getTrackById(state.currentTrackId)) {
+    state.currentTrackId = null;
+    audioPlayer.pause();
+    audioPlayer.removeAttribute("src");
+    audioPlayer.load();
+  }
+
+  rerenderAll();
+  syncLibraryPolling();
+
+  if (!preserveStatus && !state.isUploading && !state.isConverting) {
+    uploadStatus.textContent = "";
+    conversionStatus.textContent = "";
+  }
 }
 
-uploadForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
+function getPlayableTrackPool() {
+  const activePlaylist = getActivePlaylist();
 
-  if (!fileInput.files.length) {
+  if (activePlaylist) {
+    const playlistTracks = activePlaylist.trackIds.map((trackId) => getTrackById(trackId)).filter((track) => track && track.url);
+
+    if (playlistTracks.some((track) => track.id === state.currentTrackId)) {
+      return playlistTracks;
+    }
+  }
+
+  return state.tracks.filter((track) => track.url);
+}
+
+function pickRandomTrack(pool, excludeTrackId) {
+  if (!pool.length) {
+    return null;
+  }
+
+  if (pool.length === 1) {
+    return pool[0];
+  }
+
+  const filteredPool = pool.filter((track) => track.id !== excludeTrackId);
+  const sourcePool = filteredPool.length ? filteredPool : pool;
+  const randomIndex = Math.floor(Math.random() * sourcePool.length);
+  return sourcePool[randomIndex];
+}
+
+async function playAdjacentTrack(direction) {
+  const pool = getPlayableTrackPool();
+
+  if (!pool.length) {
+    return;
+  }
+
+  if (state.playbackMode === "shuffle") {
+    const randomTrack = pickRandomTrack(pool, state.currentTrackId);
+    if (randomTrack) {
+      await playTrack(randomTrack.id);
+    }
+    return;
+  }
+
+  const currentIndex = pool.findIndex((track) => track.id === state.currentTrackId);
+  const safeIndex = currentIndex === -1 ? 0 : (currentIndex + direction + pool.length) % pool.length;
+  await playTrack(pool[safeIndex].id);
+}
+
+async function handleTrackEnded() {
+  if (state.playbackMode === "repeat-one" && getCurrentTrack()) {
+    audioPlayer.currentTime = 0;
+
+    try {
+      await audioPlayer.play();
+    } catch (error) {
+      uploadStatus.textContent = error?.message || t("playbackBlocked");
+    }
+
+    return;
+  }
+
+  await playAdjacentTrack(1);
+}
+
+function updateDropzoneText() {
+  const count = fileInput.files?.length || 0;
+
+  if (!count) {
+    dropzoneTitle.textContent = t("dropzoneTitle");
+    dropzoneMeta.textContent = t("dropzoneMeta");
+    return;
+  }
+
+  dropzoneTitle.textContent = t("fileCountReady", { count });
+  dropzoneMeta.textContent = Array.from(fileInput.files)
+    .slice(0, 2)
+    .map((file) => file.name)
+    .join(" | ");
+}
+
+async function uploadSingleFile(file, index, total, progressMap) {
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append("tracks", file);
+
+    const request = new XMLHttpRequest();
+    request.open("POST", "/api/upload");
+    request.responseType = "json";
+
+    request.upload.addEventListener("progress", (progressEvent) => {
+      if (!progressEvent.lengthComputable) {
+        return;
+      }
+
+      progressMap[index] = (progressEvent.loaded / progressEvent.total) * 100;
+      const overall = progressMap.reduce((sum, value) => sum + value, 0) / total;
+      setUploadProgress(overall);
+    });
+
+    request.addEventListener("load", () => {
+      const responsePayload = request.response || {};
+      if (request.status >= 200 && request.status < 300) {
+        progressMap[index] = 100;
+        const overall = progressMap.reduce((sum, value) => sum + value, 0) / total;
+        setUploadProgress(overall);
+        resolve(responsePayload);
+        return;
+      }
+
+      reject(new Error(responsePayload.error || t("uploadFailed")));
+    });
+
+    request.addEventListener("error", () => {
+      reject(new Error(t("uploadFailed")));
+    });
+
+    request.send(formData);
+  });
+}
+
+async function uploadSelectedFiles() {
+  if (state.isUploading) {
+    return;
+  }
+
+  const files = Array.from(fileInput.files || []);
+
+  if (!files.length) {
     uploadStatus.textContent = t("chooseAudioFiles");
     return;
   }
 
-  const formData = new FormData();
-  Array.from(fileInput.files).forEach((file) => {
-    formData.append("tracks", file);
-  });
+  state.isUploading = true;
+  state.conversionItems = [];
+  renderConverterDownloads();
+  const progressMap = files.map(() => 0);
+  let uploadedCount = 0;
+  let failedCount = 0;
+  let nextIndex = 0;
+
+  uploadStatus.textContent = t("uploadingStatus", { current: 0, total: files.length });
+  setUploadProgress(0);
+
+  const worker = async () => {
+    while (nextIndex < files.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+
+      try {
+        await uploadSingleFile(files[currentIndex], currentIndex, files.length, progressMap);
+        uploadedCount += 1;
+      } catch {
+        failedCount += 1;
+        progressMap[currentIndex] = 100;
+        const overall = progressMap.reduce((sum, value) => sum + value, 0) / files.length;
+        setUploadProgress(overall);
+      }
+
+      const current = Math.min(uploadedCount + failedCount, files.length);
+      uploadStatus.textContent = t("uploadingStatus", {
+        current,
+        total: files.length
+      });
+    }
+  };
 
   try {
-    setUploadState(true, t("uploadingStatus"));
+    await Promise.all(
+      Array.from({ length: Math.min(MAX_PARALLEL_UPLOADS, files.length) }, () => worker())
+    );
 
-    const response = await fetch("/api/upload", {
-      method: "POST",
-      body: formData
-    });
-
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      setUploadState(false, payload.error || t("uploadFailed"));
-      return;
-    }
-
-    state.tracks = [...payload.tracks, ...state.tracks];
-    state.settings = payload.settings || state.settings;
-    renderTargetLufs();
-    renderLibrary();
-    renderOverview();
-    uploadStatus.textContent = t("importedStatus", { count: payload.tracks.length });
     uploadForm.reset();
     updateDropzoneText();
+    await fetchLibrary({ preserveStatus: true });
     currentView = "library";
     renderNavigation();
 
-    if (payload.tracks.length) {
-      await playTrack(payload.tracks[0].id);
-    } else {
-      renderNowPlaying(getCurrentTrack());
+    if (!uploadedCount) {
+      uploadStatus.textContent = t("uploadFailed");
+      return;
     }
-  } catch (_error) {
-    setUploadState(false, t("uploadFailed"));
+
+    if (failedCount) {
+      uploadStatus.textContent = t("importedPartialStatus", {
+        success: uploadedCount,
+        failed: failedCount
+      });
+    } else {
+      uploadStatus.textContent = t("importedQueuedStatus", { count: uploadedCount });
+    }
+  } finally {
+    state.isUploading = false;
+    window.setTimeout(() => {
+      resetUploadProgress();
+    }, 400);
+  }
+}
+
+async function runConversion(mode) {
+  if (state.isConverting) {
     return;
   }
 
-  setUploadState(false);
-});
+  if (!state.converterSelectedTrackIds.length) {
+    conversionStatus.textContent = t("conversionNoSelection");
+    return;
+  }
+
+  state.isConverting = true;
+  state.conversionItems = [];
+  renderConverterDownloads();
+  conversionStatus.textContent = mode === "overwrite" ? t("conversionPreparingOverwrite") : t("conversionPreparingDownload");
+
+  try {
+    const response = await fetch("/api/convert", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        mode,
+        trackIds: state.converterSelectedTrackIds,
+        targetLufs: state.settings.targetLufs,
+        applyEq: applyEqToExportToggle.checked,
+        eqBands
+      })
+    });
+
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(payload.error || t("conversionFailed"));
+    }
+
+    if (mode === "download") {
+      state.conversionItems = Array.isArray(payload.items) ? payload.items : [];
+      renderConverterDownloads();
+      conversionStatus.textContent = t("conversionDownloadSuccess");
+
+      state.conversionItems.forEach((item, index) => {
+        window.setTimeout(() => {
+          const anchor = document.createElement("a");
+          anchor.href = item.downloadUrl;
+          anchor.download = item.fileName || "";
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+        }, index * 120);
+      });
+      return;
+    }
+
+    await fetchLibrary({ preserveStatus: true });
+    conversionStatus.textContent = t("conversionOverwriteSuccess");
+  } catch (error) {
+    conversionStatus.textContent = error.message || t("conversionFailed");
+  } finally {
+    state.isConverting = false;
+  }
+}
 
 targetLufsSlider.addEventListener("input", () => {
   state.settings.targetLufs = Number(targetLufsSlider.value);
   renderTargetLufs();
-  renderLibrary();
-  renderOverview();
-  renderNowPlaying(getCurrentTrack());
+  renderCurrentCompensation();
   applyTrackLeveling();
+});
+
+cpuCoresSlider.addEventListener("input", () => {
+  state.settings.processingCores = Number(cpuCoresSlider.value);
+  renderProcessingCores();
 });
 
 autoLevelToggle.addEventListener("change", () => {
   state.autoLevelEnabled = autoLevelToggle.checked;
   renderAutoLevelState();
   applyTrackLeveling();
+  renderCurrentCompensation();
 });
 
 saveLufsButton.addEventListener("click", async () => {
@@ -645,34 +1656,100 @@ saveLufsButton.addEventListener("click", async () => {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      targetLufs: state.settings.targetLufs
+      targetLufs: state.settings.targetLufs,
+      processingCores: state.settings.processingCores
     })
   });
 
-  const payload = await response.json();
+  const payload = await response.json().catch(() => ({}));
+
   if (!response.ok) {
     uploadStatus.textContent = payload.error || t("saveFailed");
     return;
   }
 
-  state.settings.targetLufs = payload.targetLufs;
+  state.settings = {
+    ...state.settings,
+    ...payload
+  };
   renderTargetLufs();
-  renderLibrary();
-  renderOverview();
-  renderNowPlaying(getCurrentTrack());
-  applyTrackLeveling();
-  uploadStatus.textContent = t("saveSuccess", { value: payload.targetLufs });
+  renderProcessingCores();
+  renderCurrentCompensation();
+  uploadStatus.textContent = t("playbackSettingsSaved", {
+    lufs: payload.targetLufs,
+    used: payload.processingCores,
+    total: payload.availableCpuCount
+  });
+});
+
+createPlaylistButton.addEventListener("click", async () => {
+  const name = playlistNameInput.value.trim();
+
+  if (!name) {
+    uploadStatus.textContent = t("playlistNameRequired");
+    return;
+  }
+
+  if (!state.selectedTrackIds.length) {
+    uploadStatus.textContent = t("playlistSelectionRequired");
+    return;
+  }
+
+  const response = await fetch("/api/playlists", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      name,
+      trackIds: state.selectedTrackIds
+    })
+  });
+
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    uploadStatus.textContent = payload.error || t("playlistCreateFailed");
+    return;
+  }
+
+  state.playlists = payload.playlists || state.playlists;
+  state.selectedTrackIds = [];
+  state.activePlaylistId = payload.playlist?.id || state.activePlaylistId;
+  state.playlistBuilderOpen = false;
+  playlistNameInput.value = "";
+  rerenderAll();
+  uploadStatus.textContent = t("playlistCreated");
+});
+
+closePlaylistDetailButton.addEventListener("click", () => {
+  state.activePlaylistId = null;
+  renderPlaylists();
+});
+
+togglePlaylistBuilderButton.addEventListener("click", () => {
+  state.playlistBuilderOpen = !state.playlistBuilderOpen;
+  renderPlaylistBuilder();
 });
 
 resetEqButton.addEventListener("click", async () => {
   eqBands.forEach((band) => {
     band.gain = 0;
   });
+
   buildEqControls();
   await ensureAudioGraph();
   state.eqNodes.forEach((node) => {
     node.gain.value = 0;
   });
+});
+
+downloadConvertedButton.addEventListener("click", async () => {
+  await runConversion("download");
+});
+
+overwriteConvertedButton.addEventListener("click", async () => {
+  await runConversion("overwrite");
 });
 
 playPauseButton.addEventListener("click", async () => {
@@ -687,10 +1764,19 @@ playPauseButton.addEventListener("click", async () => {
 
   if (audioPlayer.paused) {
     await ensureAudioGraph();
-    await audioPlayer.play();
+
+    try {
+      await audioPlayer.play();
+    } catch (error) {
+      uploadStatus.textContent = error?.message || t("playbackBlocked");
+    }
   } else {
     audioPlayer.pause();
   }
+});
+
+playbackModeButton.addEventListener("click", () => {
+  cyclePlaybackMode();
 });
 
 prevTrackButton.addEventListener("click", async () => {
@@ -703,11 +1789,11 @@ nextTrackButton.addEventListener("click", async () => {
 
 seekBar.addEventListener("input", () => {
   const duration = Number.isFinite(audioPlayer.duration) ? audioPlayer.duration : 0;
-  if (duration <= 0) {
-    return;
+
+  if (duration > 0) {
+    audioPlayer.currentTime = (Number(seekBar.value) / 1000) * duration;
+    updateTimeline();
   }
-  audioPlayer.currentTime = (Number(seekBar.value) / 1000) * duration;
-  updateTimeline();
 });
 
 volumeSlider.addEventListener("input", () => {
@@ -717,6 +1803,7 @@ volumeSlider.addEventListener("input", () => {
 audioPlayer.addEventListener("play", async () => {
   await ensureAudioGraph();
   applyTrackLeveling();
+  renderCurrentCompensation();
   renderPlayState();
 });
 
@@ -724,20 +1811,22 @@ audioPlayer.addEventListener("pause", () => {
   renderPlayState();
 });
 
-audioPlayer.addEventListener("loadedmetadata", () => {
-  updateTimeline();
+audioPlayer.addEventListener("loadedmetadata", updateTimeline);
+audioPlayer.addEventListener("timeupdate", updateTimeline);
+audioPlayer.addEventListener("ended", async () => {
+  await handleTrackEnded();
 });
 
-audioPlayer.addEventListener("timeupdate", () => {
-  updateTimeline();
+uploadForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await uploadSelectedFiles();
 });
 
-audioPlayer.addEventListener("ended", () => {
-  playAdjacentTrack(1);
-});
-
-fileInput.addEventListener("change", () => {
+fileInput.addEventListener("change", async () => {
   updateDropzoneText();
+  if (fileInput.files.length) {
+    await uploadSelectedFiles();
+  }
 });
 
 navItems.forEach((item) => {
@@ -751,6 +1840,10 @@ customizeItems.forEach((item) => {
   item.addEventListener("click", () => {
     currentCustomizeView = item.dataset.customizeView;
     renderNavigation();
+    document.querySelector(`#${currentCustomizeView}Panel`)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
   });
 });
 
@@ -768,8 +1861,9 @@ customizeItems.forEach((item) => {
   });
 });
 
-dropzone.addEventListener("drop", (event) => {
+dropzone.addEventListener("drop", async (event) => {
   const files = Array.from(event.dataTransfer?.files || []);
+
   if (!files.length) {
     return;
   }
@@ -778,6 +1872,7 @@ dropzone.addEventListener("drop", (event) => {
   files.forEach((file) => dataTransfer.items.add(file));
   fileInput.files = dataTransfer.files;
   updateDropzoneText();
+  await uploadSelectedFiles();
 });
 
 langEnButton.addEventListener("click", () => {
@@ -788,30 +1883,39 @@ langZhButton.addEventListener("click", () => {
   setLanguage("zh");
 });
 
-function updateDropzoneText() {
-  const count = fileInput.files?.length || 0;
-  if (!count) {
-    dropzoneTitle.textContent = t("dropzoneTitle");
-    dropzoneMeta.textContent = t("dropzoneMeta");
-    return;
-  }
+themeSystemButton.addEventListener("click", () => {
+  setTheme("system");
+});
 
-  dropzoneTitle.textContent = t("filesReady", { count });
-  dropzoneMeta.textContent = Array.from(fileInput.files)
-    .slice(0, 2)
-    .map((file) => file.name)
-    .join(" | ");
-}
+themeLightButton.addEventListener("click", () => {
+  setTheme("light");
+});
 
+themeDarkButton.addEventListener("click", () => {
+  setTheme("dark");
+});
+
+applyTheme();
 applyTranslations();
 buildEqControls();
 renderAutoLevelState();
 renderOverview();
-renderNowPlaying();
+renderLibrary();
+renderSelectedTracks();
+renderPlaylistTrackPicker();
+renderConverterTrackPicker();
+renderPlaylists();
+renderBottomPlayer();
+renderCurrentCompensation();
 renderPlayState();
+renderPlaybackModeButton();
+renderConverterSummary();
+renderConverterDownloads();
 updateTimeline();
+updateSelectionSummary();
 updateDropzoneText();
 renderNavigation();
+
 fetchLibrary().catch(() => {
   uploadStatus.textContent = t("libraryLoadFailed");
 });
