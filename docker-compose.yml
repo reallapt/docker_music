@@ -1,0 +1,11 @@
+services:
+  music-player:
+    build: .
+    container_name: docker-music-player
+    ports:
+      - "3002:3000"
+    environment:
+      PORT: 3000
+      DEFAULT_TARGET_LUFS: -14
+    volumes:
+      - ./data:/app/data
