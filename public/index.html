@@ -18,18 +18,23 @@
             <span></span>
           </div>
           <div>
-            <p class="eyebrow">Liquid Glass Audio</p>
+            <p class="eyebrow" data-i18n="brandEyebrow">Liquid Glass Audio</p>
             <strong class="brand-title">Docker Music Player</strong>
           </div>
         </div>
 
+        <div class="language-switcher glass-inline">
+          <button id="langEnButton" class="lang-button active" type="button">EN</button>
+          <button id="langZhButton" class="lang-button" type="button">中文</button>
+        </div>
+
         <nav class="nav-menu">
-          <button class="nav-item active" data-view="library" type="button">Library</button>
-          <button class="nav-item" data-view="customize" type="button">Customize</button>
+          <button class="nav-item active" data-view="library" type="button" data-i18n="navLibrary">Library</button>
+          <button class="nav-item" data-view="customize" type="button" data-i18n="navCustomize">Customize</button>
         </nav>
 
         <section class="nav-section">
-          <p class="eyebrow">Import</p>
+          <p class="eyebrow" data-i18n="importEyebrow">Import</p>
           <form id="uploadForm" class="upload-form">
             <label class="dropzone sidebar-dropzone" for="trackFiles" id="dropzone">
               <input
@@ -39,7 +44,7 @@
                 accept=".mp3,.m4a,.aac,audio/mpeg,audio/aac,audio/mp4"
                 multiple
               />
-              <div class="dropzone-badge">Import</div>
+              <div class="dropzone-badge" data-i18n="dropzoneBadge">Import</div>
               <strong id="dropzoneTitle">Drop tracks into your library</strong>
               <small id="dropzoneMeta">MP3, M4A, AAC</small>
             </label>
@@ -49,10 +54,10 @@
         </section>
 
         <section class="nav-section customize-nav" id="customizeMenu">
-          <p class="eyebrow">Customize</p>
+          <p class="eyebrow" data-i18n="navCustomize">Customize</p>
           <div class="subnav-menu">
-            <button class="subnav-item active" data-customize-view="playback" type="button">Playback</button>
-            <button class="subnav-item" data-customize-view="eq" type="button">Equalizer</button>
+            <button class="subnav-item active" data-customize-view="playback" type="button" data-i18n="subnavPlayback">Playback</button>
+            <button class="subnav-item" data-customize-view="eq" type="button" data-i18n="subnavEqualizer">Equalizer</button>
           </div>
         </section>
       </aside>
@@ -61,27 +66,27 @@
         <section class="content-panel active" id="libraryView">
           <header class="stage-header glass-card">
             <div>
-              <p class="eyebrow">Library</p>
-              <h1 class="stage-title">Choose music from a full-screen listening layout</h1>
-              <p class="hero-text">
+              <p class="eyebrow" data-i18n="navLibrary">Library</p>
+              <h1 class="stage-title" data-i18n="libraryTitle">Choose music from a full-screen listening layout</h1>
+              <p class="hero-text" data-i18n="libraryHero">
                 The app now behaves like a mainstream music player: navigation on the left,
                 full-size listening pages on the right.
               </p>
             </div>
             <div class="topbar-actions">
-              <span class="topbar-pill">Adaptive layout</span>
-              <span class="topbar-pill">Custom player</span>
-              <span class="topbar-pill">Apple Music inspired</span>
+              <span class="topbar-pill" data-i18n="pillAdaptive">Adaptive layout</span>
+              <span class="topbar-pill" data-i18n="pillCustom">Custom player</span>
+              <span class="topbar-pill" data-i18n="pillApple">Apple Music inspired</span>
             </div>
           </header>
 
           <section class="hero-player glass-card">
             <div class="hero-player-copy">
-              <p class="eyebrow">Now Playing</p>
+              <p class="eyebrow" data-i18n="nowPlayingEyebrow">Now Playing</p>
               <h2 id="nowPlayingTitle" class="player-title">No track selected</h2>
               <p id="nowPlayingMeta" class="hero-text">Import tracks and choose one from the library menu.</p>
               <div class="hero-actions">
-                <span class="support-pill">Main playback surface</span>
+                <span class="support-pill" data-i18n="mainPlaybackSurface">Main playback surface</span>
                 <span class="support-pill" id="currentTrackDisplay">None</span>
               </div>
             </div>
@@ -97,32 +102,32 @@
 
           <section class="overview-grid">
             <article class="overview-card glass-card">
-              <span class="mini-label">Tracks</span>
+              <span class="mini-label" data-i18n="statsTracks">Tracks</span>
               <strong id="trackCount">0</strong>
-              <small>Total imported songs in your local library.</small>
+              <small data-i18n="statsTracksMeta">Total imported songs in your local library.</small>
             </article>
             <article class="overview-card glass-card">
-              <span class="mini-label">Analyzed</span>
+              <span class="mini-label" data-i18n="statsAnalyzed">Analyzed</span>
               <strong id="analyzedCount">0</strong>
-              <small>Tracks with integrated loudness data available.</small>
+              <small data-i18n="statsAnalyzedMeta">Tracks with integrated loudness data available.</small>
             </article>
             <article class="overview-card glass-card">
-              <span class="mini-label">Average LUFS</span>
+              <span class="mini-label" data-i18n="statsAverageLufs">Average LUFS</span>
               <strong id="averageLufs">--</strong>
-              <small>Quick snapshot of your imported library loudness.</small>
+              <small data-i18n="statsAverageLufsMeta">Quick snapshot of your imported library loudness.</small>
             </article>
             <article class="overview-card glass-card">
-              <span class="mini-label">Auto level</span>
+              <span class="mini-label" data-i18n="statsAutoLevel">Auto level</span>
               <strong id="autoLevelState">Enabled</strong>
-              <small>Playback compensation follows your current LUFS target.</small>
+              <small data-i18n="statsAutoLevelMeta">Playback compensation follows your current LUFS target.</small>
             </article>
           </section>
 
           <section class="library-stage glass-card">
             <div class="panel-heading">
-              <p class="eyebrow">Music</p>
-              <h2>Library Menu</h2>
-              <p>Choose a song from the right-side content page just like a modern streaming app.</p>
+              <p class="eyebrow" data-i18n="musicEyebrow">Music</p>
+              <h2 data-i18n="libraryMenuTitle">Library Menu</h2>
+              <p data-i18n="libraryMenuMeta">Choose a song from the right-side content page just like a modern streaming app.</p>
             </div>
             <div id="library" class="library-list library-grid"></div>
           </section>
@@ -131,9 +136,9 @@
         <section class="content-panel" id="customizeView">
           <header class="stage-header glass-card">
             <div>
-              <p class="eyebrow">Customize</p>
-              <h1 class="stage-title">Tune playback behavior and EQ from one menu section</h1>
-              <p class="hero-text">
+              <p class="eyebrow" data-i18n="navCustomize">Customize</p>
+              <h1 class="stage-title" data-i18n="customizeTitle">Tune playback behavior and EQ from one menu section</h1>
+              <p class="hero-text" data-i18n="customizeHero">
                 Playback and equalizer settings now live under Customize instead of taking over the main player page.
               </p>
             </div>
@@ -142,34 +147,34 @@
           <section class="customize-panel active" id="playbackPanel">
             <section class="panel glass-card">
               <div class="panel-heading">
-                <p class="eyebrow">Playback</p>
-                <h2>Main listening controls</h2>
-                <p>Adjust LUFS target and overall leveling behavior here.</p>
+                <p class="eyebrow" data-i18n="subnavPlayback">Playback</p>
+                <h2 data-i18n="playbackTitle">Main listening controls</h2>
+                <p data-i18n="playbackMeta">Adjust LUFS target and overall leveling behavior here.</p>
               </div>
 
               <div class="controls-grid">
                 <label class="control-card">
-                  <span class="mini-label">Target LUFS</span>
+                  <span class="mini-label" data-i18n="targetLufs">Target LUFS</span>
                   <input id="targetLufs" type="range" min="-24" max="-8" step="1" value="-14" />
                   <strong id="targetLufsReadout">-14 LUFS</strong>
                 </label>
 
                 <label class="control-card toggle-card">
-                  <span class="mini-label">One-click leveling</span>
+                  <span class="mini-label" data-i18n="oneClickLeveling">One-click leveling</span>
                   <input id="autoLevelToggle" type="checkbox" checked />
-                  <strong>Enable playback compensation</strong>
-                  <small>Uses measured loudness per track.</small>
+                  <strong data-i18n="enablePlaybackComp">Enable playback compensation</strong>
+                  <small data-i18n="usesMeasuredLoudness">Uses measured loudness per track.</small>
                 </label>
 
                 <article class="control-card stat-control">
-                  <span class="mini-label">Saved target</span>
+                  <span class="mini-label" data-i18n="savedTarget">Saved target</span>
                   <strong id="targetLufsValue">-14 LUFS</strong>
                   <button id="saveLufsButton" class="secondary-button full-width">Save Target LUFS</button>
                 </article>
               </div>
 
               <div class="smart-note">
-                <strong>Smart note</strong>
+                <strong data-i18n="smartNote">Smart note</strong>
                 <span id="levelingHint">Most streaming playback targets sit close to -14 LUFS.</span>
               </div>
             </section>
@@ -178,9 +183,9 @@
           <section class="customize-panel" id="eqPanel">
             <section class="panel glass-card">
               <div class="panel-heading">
-                <p class="eyebrow">Equalizer</p>
-                <h2>Glass EQ deck</h2>
-                <p>Adjust tone in real time without rewriting the source audio.</p>
+                <p class="eyebrow" data-i18n="subnavEqualizer">Equalizer</p>
+                <h2 data-i18n="eqTitle">Glass EQ deck</h2>
+                <p data-i18n="eqMeta">Adjust tone in real time without rewriting the source audio.</p>
               </div>
               <div id="eqControls" class="eq-grid"></div>
               <button id="resetEqButton" class="secondary-button">Reset Equalizer</button>
@@ -196,7 +201,7 @@
           <div class="bottom-player-core"></div>
         </div>
         <div class="bottom-player-copy">
-          <span class="mini-label">Now Playing</span>
+          <span class="mini-label" data-i18n="nowPlayingEyebrow">Now Playing</span>
           <strong id="bottomNowPlayingTitle">No track selected</strong>
           <small id="bottomNowPlayingMeta">Choose a track from the library to start.</small>
         </div>
@@ -216,7 +221,7 @@
         </div>
 
         <div class="volume-row">
-          <span class="mini-label">Volume</span>
+          <span class="mini-label" data-i18n="volume">Volume</span>
           <input id="volumeSlider" class="volume-slider" type="range" min="0" max="100" step="1" value="100" />
         </div>
       </div>
