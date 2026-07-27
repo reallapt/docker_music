@@ -118,7 +118,20 @@
               <p data-i18n="libraryMenuMeta">Tap any song row to play.</p>
             </div>
 
-            <div class="library-list-head library-head mini-label">
+            <div class="library-toolbar">
+              <div class="library-toolbar-actions">
+                <button id="toggleLibrarySelectionButton" class="secondary-button" type="button">
+                  Select
+                </button>
+                <button id="deleteSelectedTracksButton" class="danger-button" type="button" hidden>
+                  Delete Selected
+                </button>
+                <span id="librarySelectionSummary" class="support-pill" hidden>0 selected</span>
+              </div>
+            </div>
+
+            <div id="libraryListHead" class="library-list-head library-head mini-label">
+              <span data-i18n="listColumnSelect">Select</span>
               <span data-i18n="listColumnTrack">Track</span>
               <span data-i18n="listColumnArtist">Artist</span>
               <span data-i18n="listColumnDuration">Duration</span>
@@ -150,8 +163,8 @@
 
             <section id="playlistBuilderPanel" class="playlist-builder-panel glass-inline-card" hidden>
               <div class="panel-heading compact-heading">
-                <h2 data-i18n="playlistBuilderTitle">Add songs to a new playlist</h2>
-                <p data-i18n="playlistBuilderMeta">Open this panel only when you want to build a playlist.</p>
+                <h2 id="playlistBuilderTitleText" data-i18n="playlistBuilderTitle">Add songs to a new playlist</h2>
+                <p id="playlistBuilderMetaText" data-i18n="playlistBuilderMeta">Open this panel only when you want to build a playlist.</p>
               </div>
 
               <section class="playlist-builder">
@@ -161,6 +174,14 @@
                 </label>
                 <div class="playlist-builder-actions">
                   <span class="support-pill" id="playlistSelectionSummary">0 selected</span>
+                  <div class="playlist-inline-actions">
+                    <button id="playlistSelectAllButton" class="secondary-button" type="button" data-i18n="playlistSelectAll">
+                      Select All
+                    </button>
+                    <button id="playlistClearSelectionButton" class="secondary-button" type="button" data-i18n="playlistClearSelection">
+                      Clear
+                    </button>
+                  </div>
                   <button id="createPlaylistButton" class="primary-button" type="button" data-i18n="createPlaylist">Create Playlist</button>
                 </div>
               </section>
@@ -194,12 +215,18 @@
                   <h2 id="playlistDetailTitle">Playlist</h2>
                   <p id="playlistDetailMeta">0 tracks</p>
                 </div>
-                <button id="closePlaylistDetailButton" class="secondary-button" type="button" data-i18n="backToPlaylists">Close</button>
+                <div class="playlist-detail-actions">
+                  <button id="playPlaylistButton" class="primary-button" type="button" data-i18n="playPlaylist">Play Playlist</button>
+                  <button id="editPlaylistButton" class="secondary-button" type="button" data-i18n="editPlaylist">Edit</button>
+                  <button id="closePlaylistDetailButton" class="secondary-button" type="button" data-i18n="backToPlaylists">Close</button>
+                </div>
               </div>
-              <div class="library-list-head library-head mini-label">
+              <div id="playlistDetailListHead" class="library-list-head library-head library-head-actions mini-label">
+                <span data-i18n="listColumnSelect">Select</span>
                 <span data-i18n="listColumnTrack">Track</span>
                 <span data-i18n="listColumnArtist">Artist</span>
                 <span data-i18n="listColumnDuration">Duration</span>
+                <span data-i18n="listColumnActions">Actions</span>
               </div>
               <div id="playlistDetailTracks" class="library-list"></div>
             </section>
@@ -207,18 +234,6 @@
         </section>
 
         <section class="content-panel" id="customizeView">
-          <section class="customize-toolbar glass-inline-card">
-            <button class="subnav-item active inline-customize-tab" data-customize-view="playback" type="button" data-i18n="subnavPlayback">
-              Playback
-            </button>
-            <button class="subnav-item inline-customize-tab" data-customize-view="eq" type="button" data-i18n="subnavEqualizer">
-              Equalizer
-            </button>
-            <button class="subnav-item inline-customize-tab" data-customize-view="convert" type="button" data-i18n="subnavConverter">
-              Converter
-            </button>
-          </section>
-
           <section class="customize-panel active" id="playbackPanel">
             <section class="panel glass-card">
               <div class="panel-heading">
@@ -234,13 +249,6 @@
                   <strong id="targetLufsReadout">-14 LUFS</strong>
                 </label>
 
-                <label class="control-card">
-                  <span class="mini-label" data-i18n="cpuCores">CPU Cores</span>
-                  <input id="cpuCoresSlider" class="lufs-slider" type="range" min="1" max="4" step="1" value="1" />
-                  <strong id="cpuCoresReadout">1 / 4 cores</strong>
-                  <small data-i18n="cpuCoresMeta">Choose how many CPU cores background analysis and batch conversion can use.</small>
-                </label>
-
                 <label class="control-card toggle-card">
                   <span class="mini-label" data-i18n="oneClickLeveling">One-click leveling</span>
                   <input id="autoLevelToggle" type="checkbox" checked />
@@ -251,8 +259,8 @@
                 <article class="control-card stat-control">
                   <span class="mini-label" data-i18n="savedTarget">Saved target</span>
                   <strong id="targetLufsValue">-14 LUFS</strong>
-                  <button id="saveLufsButton" class="secondary-button full-width" type="button" data-i18n="savePlaybackSettingsButton">
-                    Save Playback Settings
+                  <button id="saveLufsButton" class="secondary-button full-width" type="button" data-i18n="saveTargetButton">
+                    Save Target LUFS
                   </button>
                 </article>
               </div>
@@ -312,10 +320,27 @@
                 </article>
               </div>
 
+              <div class="converter-actions converter-actions-top">
+                <button id="downloadConvertedButton" class="primary-button" type="button" data-i18n="downloadConverted">
+                  Download Balanced Files
+                </button>
+                <button id="overwriteConvertedButton" class="secondary-button" type="button" data-i18n="overwriteConverted">
+                  Overwrite Originals
+                </button>
+              </div>
+
               <section class="playlist-selected-stage converter-picker-stage">
                 <div class="panel-heading compact-heading">
                   <h2 data-i18n="converterPickerTitle">Choose tracks for conversion</h2>
                   <p data-i18n="converterPickerMeta">Select only the songs you want the LUFS converter to process.</p>
+                </div>
+                <div class="playlist-inline-actions playlist-picker-actions">
+                  <button id="converterSelectAllButton" class="secondary-button" type="button" data-i18n="playlistSelectAll">
+                    Select All
+                  </button>
+                  <button id="converterClearSelectionButton" class="secondary-button" type="button" data-i18n="playlistClearSelection">
+                    Clear
+                  </button>
                 </div>
                 <div class="library-list-head playlist-picker-head mini-label">
                   <span data-i18n="listColumnSelect">Select</span>
@@ -326,19 +351,11 @@
                 <div id="converterTrackPicker" class="library-list"></div>
               </section>
 
-              <div class="converter-actions">
-                <button id="downloadConvertedButton" class="primary-button" type="button" data-i18n="downloadConverted">
-                  Download Balanced Files
-                </button>
-                <button id="overwriteConvertedButton" class="secondary-button" type="button" data-i18n="overwriteConverted">
-                  Overwrite Originals
-                </button>
-              </div>
-
               <p id="conversionStatus" class="status-text"></p>
               <div id="conversionDownloads" class="conversion-downloads"></div>
             </section>
           </section>
+
         </section>
       </main>
     </div>
@@ -353,14 +370,10 @@
           <span class="mini-label" data-i18n="nowPlayingEyebrow">Now Playing</span>
           <strong id="bottomNowPlayingTitle">No track selected</strong>
           <small id="bottomNowPlayingArtist">Unknown Artist</small>
-          <small id="bottomNowPlayingMeta">Choose a track from the library to start.</small>
+          <small id="bottomNowPlayingMeta" hidden>Choose a track from the library to start.</small>
+          <div id="liveLyricsBody" class="live-lyrics-inline">Lyrics from the file metadata will appear here.</div>
         </div>
       </div>
-
-      <section class="lyrics-inline-panel">
-        <span class="mini-label" data-i18n="liveLyrics">Lyrics</span>
-        <div id="liveLyricsBody" class="live-lyrics-body">Lyrics from the file metadata will appear here.</div>
-      </section>
 
       <div class="player-ui">
         <div class="transport-row">
