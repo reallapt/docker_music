@@ -24,10 +24,10 @@ An Apple Music inspired web music player with a Liquid Glass interface, LUFS lou
 
 ## Highlights / 本次更新
 
-- Optional live FPS monitor with local persistence.
-- Playlist create, edit, delete, and track removal.
-- Duplicate uploads replace the existing track instead of creating duplicates.
-- Improved lyrics parsing, metadata refresh, responsive polling, and reduced-motion behavior.
+- Optional live FPS monitor with local persistence. / 可选实时 FPS 监测，并在本地保存开关状态。
+- Playlist create, edit, delete, and track removal. / 支持创建、编辑、删除播放列表和移除歌曲。
+- Duplicate uploads replace the existing track instead of creating duplicates. / 重复上传会替换已有歌曲，不会生成重复条目。
+- Improved lyrics parsing, metadata refresh, responsive polling, and reduced-motion behavior. / 优化歌词解析、元数据刷新、响应式轮询和减少动画效果。
 
 ## Docker Hub Image / Docker Hub 镜像
 
@@ -119,7 +119,10 @@ docker compose up --build -d
 - Uploaded files are stored in `/app/data`.
 - The container listens on port `3000`.
 - The example above maps host port `3002` to container port `3000`.
+- FFmpeg is included in the v2 image for LUFS analysis and audio conversion. / v2 镜像已内置 FFmpeg，用于 LUFS 分析和音频转换。
 
 ## Project Note / 项目说明
 
 This v2 release includes the FPS switch and monitor, playlist management fixes, duplicate-upload replacement, improved lyric extraction, responsive polling and animation optimizations, playback-history fixes, and settings persistence fixes.
+
+本次 v2 更新包含 FPS 开关与实时监测、播放列表管理修复、重复上传替换、歌词提取优化、轮询与动画性能优化、播放历史修复和设置持久化修复。
