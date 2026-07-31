@@ -21,7 +21,7 @@ const DEFAULT_TARGET_LUFS = Number(process.env.DEFAULT_TARGET_LUFS || -14);
 const AVAILABLE_CPU_COUNT = getAvailableCpuCount();
 const INITIAL_PROCESSING_CONCURRENCY = getConfiguredConcurrency(process.env.PROCESSING_CONCURRENCY, AVAILABLE_CPU_COUNT);
 const INITIAL_CONVERSION_CONCURRENCY = getConfiguredConcurrency(process.env.CONVERSION_CONCURRENCY, AVAILABLE_CPU_COUNT);
-const TRACK_METADATA_VERSION = 4;
+const TRACK_METADATA_VERSION = 5;
 
 let dbTaskChain = Promise.resolve();
 const processingQueue = [];
@@ -131,6 +131,34 @@ function queueDbTask(task) {
   const result = dbTaskChain.then(task, task);
   dbTaskChain = result.catch(() => {});
   return result;
+}
+
+async function removeFileIfExists(filePath) {
+  if (!filePath) {
+    return;
+  }
+
+  await fsp.rm(filePath, {
+    force: true
+  }).catch(() => {});
+}
+
+function removeTrackFromProcessingQueue(trackId) {
+  queuedTrackIds.delete(trackId);
+
+  for (let index = processingQueue.length - 1; index >= 0; index -= 1) {
+    if (processingQueue[index] === trackId) {
+      processingQueue.splice(index, 1);
+    }
+  }
+}
+
+function getArtworkFilenameForTrack(track) {
+  if (track?.coverUrl && String(track.coverUrl).startsWith("/artwork/")) {
+    return decodeURIComponent(path.basename(track.coverUrl));
+  }
+
+  return track?.id ? `${track.id}.jpg` : "";
 }
 
 function normalizeAnalysis(analysis) {
@@ -301,12 +329,32 @@ function findTagValue(tags, candidates) {
 }
 
 function stripLyricsDecorators(value) {
+  const timestampPattern = /\[(\d{1,3}):([0-5]?\d)(?:[.:](\d{1,3}))?\]/;
+  const metadataTagPattern = /^\[(ar|ti|al|by|offset|re|ve|kana|length):.*\]$/i;
+
   return String(value || "")
     .replace(/\u0000/g, "")
-    .replace(/\[[^\]]*\]/g, " ")
-    .replace(/\r/g, "\n")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => {
+      if (!line) {
+        return true;
+      }
+
+      if (timestampPattern.test(line)) {
+        return true;
+      }
+
+      return !metadataTagPattern.test(line);
+    })
+    .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function isLyricsDescriptor(value) {
+  return /(lyrics|lyric|lrc|karaoke|\u6b4c\u8bcd)/.test(String(value || "").toLowerCase());
 }
 
 function decodeSyncSafeInteger(buffer, offset = 0) {
@@ -421,6 +469,9 @@ function parseTxxxFrame(frameBuffer) {
   const descriptor = readId3EncodedString(frameBuffer, encoding, 1);
   const descriptorText = descriptor.value.toLowerCase();
   const value = decodeId3Text(frameBuffer.subarray(descriptor.nextOffset), encoding).trim();
+  if (isLyricsDescriptor(descriptorText)) {
+    return value;
+  }
 
   return /(lyrics|lyric|lrc|karaoke|姝岃瘝)/.test(descriptorText) ? value : "";
 }
@@ -434,6 +485,9 @@ function parseCommFrame(frameBuffer) {
   const descriptor = readId3EncodedString(frameBuffer, encoding, 4);
   const descriptorText = descriptor.value.toLowerCase();
   const comment = decodeId3Text(frameBuffer.subarray(descriptor.nextOffset), encoding).trim();
+  if (isLyricsDescriptor(descriptorText)) {
+    return comment;
+  }
 
   return /(lyrics|lyric|lrc|karaoke|姝岃瘝)/.test(descriptorText) ? comment : "";
 }
@@ -496,8 +550,6 @@ async function extractMp3Lyrics(filePath) {
         parsedLyrics = parseUsltFrame(frameBuffer);
       } else if (frameId === "TXXX") {
         parsedLyrics = parseTxxxFrame(frameBuffer);
-      } else if (frameId === "COMM") {
-        parsedLyrics = parseCommFrame(frameBuffer);
       }
 
       if (parsedLyrics.trim()) {
@@ -601,11 +653,10 @@ async function buildTrackMetadata(filePath, originalName, trackId) {
       "lyric",
       "uslt",
       "sylt",
+      "\u00a9lyr",
+      "\u00a9lyrics",
       "©lyr",
-      "wm/lyrics",
-      "text",
-      "comment",
-      "description"
+      "wm/lyrics"
     ]);
   const lyrics = stripLyricsDecorators(taggedLyrics || (await extractFallbackLyrics(filePath)));
   const coverUrl = await extractArtwork(filePath, trackId);
@@ -867,7 +918,7 @@ async function processTrackRecord(trackId) {
     ...track,
     title: metadataResult.title || track.title || fallbackMetadata.title,
     artist: metadataResult.artist || track.artist || fallbackMetadata.artist,
-    lyrics: metadataResult.lyrics ?? track.lyrics ?? fallbackMetadata.lyrics,
+    lyrics: metadataResult.lyrics || track.lyrics || fallbackMetadata.lyrics,
     coverUrl: metadataResult.coverUrl ?? track.coverUrl ?? fallbackMetadata.coverUrl,
     duration: Number.isFinite(analysisResult.duration) ? analysisResult.duration : track.duration ?? null,
     analysis: analysisResult.analysis ?? track.analysis ?? null,
@@ -894,6 +945,58 @@ async function processTrackRecord(trackId) {
     };
     await writeDbRaw(db);
   });
+}
+
+async function deleteTracksByIds(trackIds) {
+  const uniqueTrackIds = [...new Set(trackIds.map((trackId) => String(trackId)).filter(Boolean))];
+
+  if (!uniqueTrackIds.length) {
+    const error = new Error("Please choose at least one track.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const deletedTracks = await queueDbTask(async () => {
+    const db = await readDbRaw();
+    const existingTracks = uniqueTrackIds
+      .map((trackId) => db.tracks.find((track) => track.id === trackId))
+      .filter(Boolean)
+      .map(normalizeTrackRecord);
+
+    if (!existingTracks.length) {
+      const error = new Error("No valid tracks were selected.");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const deletedTrackIds = new Set(existingTracks.map((track) => track.id));
+    db.tracks = db.tracks.filter((track) => !deletedTrackIds.has(track.id));
+    db.playlists = db.playlists.map((playlist) => {
+      const nextTrackIds = playlist.trackIds.filter((id) => !deletedTrackIds.has(id));
+      return nextTrackIds.length === playlist.trackIds.length
+        ? playlist
+        : {
+            ...playlist,
+            trackIds: nextTrackIds,
+            updatedAt: new Date().toISOString()
+          };
+    });
+    await writeDbRaw(db);
+    return existingTracks;
+  });
+
+  deletedTracks.forEach((track) => {
+    removeTrackFromProcessingQueue(track.id);
+  });
+
+  await Promise.all(
+    deletedTracks.flatMap((track) => [
+      removeFileIfExists(track.filename ? path.join(UPLOADS_DIR, track.filename) : ""),
+      removeFileIfExists(path.join(ARTWORK_DIR, getArtworkFilenameForTrack(track)))
+    ])
+  );
+
+  return deletedTracks;
 }
 
 const storage = multer.diskStorage({
@@ -963,10 +1066,11 @@ app.get("/api/library", async (_req, res, next) => {
 
 app.patch("/api/settings", async (req, res, next) => {
   try {
-    const targetLufs = normalizeTargetLufs(req.body?.targetLufs);
+    const hasTargetLufs = req.body?.targetLufs !== undefined;
+    const targetLufs = hasTargetLufs ? normalizeTargetLufs(req.body?.targetLufs) : null;
     const processingCores = normalizeProcessingCores(req.body?.processingCores);
 
-    if (targetLufs === null) {
+    if (hasTargetLufs && targetLufs === null) {
       res.status(400).json({ error: "targetLufs must be between -30 and -6." });
       return;
     }
@@ -978,7 +1082,9 @@ app.patch("/api/settings", async (req, res, next) => {
 
     const settings = await queueDbTask(async () => {
       const db = await readDbRaw();
-      db.settings.targetLufs = targetLufs;
+      if (hasTargetLufs) {
+        db.settings.targetLufs = targetLufs;
+      }
       db.settings.processingCores = processingCores ?? db.settings.processingCores ?? processingConcurrency;
       await writeDbRaw(db);
       return db.settings;
@@ -1178,6 +1284,141 @@ app.post("/api/playlists", async (req, res, next) => {
   }
 });
 
+app.delete("/api/tracks/:trackId", async (req, res, next) => {
+  try {
+    const trackId = String(req.params.trackId || "").trim();
+
+    if (!trackId) {
+      res.status(400).json({ error: "Track id is required." });
+      return;
+    }
+
+    const deletedTracks = await deleteTracksByIds([trackId]);
+
+    res.json({
+      ok: true,
+      trackId,
+      count: deletedTracks.length
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/tracks/delete", async (req, res, next) => {
+  try {
+    const trackIds = Array.isArray(req.body?.trackIds) ? req.body.trackIds : [];
+    const deletedTracks = await deleteTracksByIds(trackIds);
+
+    res.json({
+      ok: true,
+      count: deletedTracks.length,
+      trackIds: deletedTracks.map((track) => track.id)
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch("/api/playlists/:playlistId", async (req, res, next) => {
+  try {
+    const playlistId = String(req.params.playlistId || "").trim();
+    const name = String(req.body?.name || "").trim();
+    const trackIds = Array.isArray(req.body?.trackIds) ? req.body.trackIds.map((id) => String(id)) : [];
+
+    if (!playlistId) {
+      res.status(400).json({ error: "Playlist id is required." });
+      return;
+    }
+
+    if (!name) {
+      res.status(400).json({ error: "Playlist name is required." });
+      return;
+    }
+
+    if (!trackIds.length) {
+      res.status(400).json({ error: "Please choose at least one track." });
+      return;
+    }
+
+    const result = await queueDbTask(async () => {
+      const db = await readDbRaw();
+      const playlistIndex = db.playlists.findIndex((playlist) => playlist.id === playlistId);
+
+      if (playlistIndex === -1) {
+        const error = new Error("Playlist not found.");
+        error.statusCode = 404;
+        throw error;
+      }
+
+      const uniqueTrackIds = [...new Set(trackIds)];
+      const validTrackIds = uniqueTrackIds.filter((trackId) => db.tracks.some((track) => track.id === trackId));
+
+      if (!validTrackIds.length) {
+        const error = new Error("No valid tracks were selected.");
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const playlist = {
+        ...db.playlists[playlistIndex],
+        name,
+        trackIds: validTrackIds,
+        updatedAt: new Date().toISOString()
+      };
+
+      db.playlists[playlistIndex] = playlist;
+      await writeDbRaw(db);
+
+      return {
+        playlist,
+        playlists: db.playlists
+      };
+    });
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/playlists/:playlistId", async (req, res, next) => {
+  try {
+    const playlistId = String(req.params.playlistId || "").trim();
+
+    if (!playlistId) {
+      res.status(400).json({ error: "Playlist id is required." });
+      return;
+    }
+
+    const result = await queueDbTask(async () => {
+      const db = await readDbRaw();
+      const playlistIndex = db.playlists.findIndex((playlist) => playlist.id === playlistId);
+
+      if (playlistIndex === -1) {
+        const error = new Error("Playlist not found.");
+        error.statusCode = 404;
+        throw error;
+      }
+
+      const [playlist] = db.playlists.splice(playlistIndex, 1);
+      await writeDbRaw(db);
+
+      return {
+        playlist,
+        playlists: db.playlists
+      };
+    });
+
+    res.json({
+      ok: true,
+      ...result
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/upload", upload.array("tracks", 20), async (req, res, next) => {
   try {
     const files = req.files || [];
@@ -1190,10 +1431,17 @@ app.post("/api/upload", upload.array("tracks", 20), async (req, res, next) => {
     const result = await queueDbTask(async () => {
       const db = await readDbRaw();
       const createdTracks = [];
+      const replacedAssets = [];
 
       for (const file of files) {
+        const existingIndex = db.tracks.findIndex(
+          (track) => String(track.originalName || "").trim().toLowerCase() === String(file.originalname || "").trim().toLowerCase()
+        );
+
+        const existingTrack = existingIndex === -1 ? null : normalizeTrackRecord(db.tracks[existingIndex]);
         const track = normalizeTrackRecord({
-          id: crypto.randomUUID(),
+          ...(existingTrack || {}),
+          id: existingTrack?.id || crypto.randomUUID(),
           title: sanitizeBaseName(file.originalname),
           artist: "Unknown Artist",
           lyrics: "",
@@ -1215,7 +1463,17 @@ app.post("/api/upload", upload.array("tracks", 20), async (req, res, next) => {
           processedAt: null
         });
 
-        db.tracks.unshift(track);
+        if (existingTrack) {
+          db.tracks[existingIndex] = track;
+          replacedAssets.push({
+            filename: existingTrack.filename,
+            artworkFilename: getArtworkFilenameForTrack(existingTrack),
+            trackId: existingTrack.id
+          });
+        } else {
+          db.tracks.unshift(track);
+        }
+
         createdTracks.push(track);
       }
 
@@ -1223,13 +1481,22 @@ app.post("/api/upload", upload.array("tracks", 20), async (req, res, next) => {
 
       return {
         tracks: createdTracks,
+        replacedAssets,
         settings: db.settings
       };
     });
 
     result.tracks.forEach((track) => {
+      removeTrackFromProcessingQueue(track.id);
       enqueueTrackProcessing(track.id);
     });
+
+    await Promise.all(
+      (result.replacedAssets || []).flatMap((asset) => [
+        removeFileIfExists(asset.filename ? path.join(UPLOADS_DIR, asset.filename) : ""),
+        removeFileIfExists(path.join(ARTWORK_DIR, asset.artworkFilename))
+      ])
+    );
 
     res.status(201).json(result);
   } catch (error) {
