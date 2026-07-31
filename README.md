@@ -1,106 +1,125 @@
-# Docker Music Player / Docker 音乐播放器
+# Docker Music Player
 
-An Apple Music inspired web music player with a Liquid Glass interface, LUFS loudness leveling, browser EQ, drag-and-drop import, and Docker deployment.
+An Apple Music inspired web music player with a Liquid Glass interface, LUFS loudness leveling, browser EQ, FPS monitoring, drag-and-drop import, playlist management, and Docker deployment.
 
-这是一个基于 Docker 的网页音乐播放器，整体界面参考 Apple Music，采用 Liquid Glass 视觉风格，支持 LUFS 响度平衡、浏览器端 EQ、拖拽导入和一键部署。
+这是一个基于 Docker 的网页音乐播放器，整体界面参考 Apple Music，采用 Liquid Glass 风格，支持 LUFS 响度校正、浏览器端 EQ、拖拽导入和 Docker 部署。
 
-## Features / 特色
+## Features / 特性
 
-- `LUFS Auto Leveling / LUFS 自动平衡`
-  Analyze imported tracks with `ffmpeg loudnorm`, read integrated loudness, and compensate playback toward a target LUFS value.
-  使用 `ffmpeg loudnorm` 分析导入音频的综合响度，在播放时自动朝目标 LUFS 做增益补偿。
-
-- `One-click Loudness Control / 一键响度控制`
-  Adjust the target LUFS from the playback menu and apply a consistent playback experience across your library.
-  通过播放菜单直接调整目标 LUFS，让整套音乐库获得更统一的听感。
-
-- `Built-in EQ / 内置均衡器`
-  Tune playback in real time with a browser-side equalizer, without rewriting the original audio files.
-  在浏览器中实时调节均衡器，不会改写原始音频文件。
-
-- `Liquid Glass UI / 液态玻璃界面`
-  Full-screen layout, left navigation, right-side content pages, and a custom bottom playback bar.
-  全屏自适应布局、左侧导航、右侧内容页，以及自定义底部播放条。
-
-- `Language Switch / 语言切换`
-  Built-in `EN / 中文` toggle for the main UI.
-  内置 `EN / 中文` 一键切换。
+- Liquid Glass UI / 液态玻璃界面
+- Large artwork + bottom playback bar / 大封面与底部播放条
+- Timed lyrics support / 支持时间轴歌词
+- LUFS auto leveling / LUFS 自动响度校正
+- Browser EQ / 浏览器端均衡器
+- EN / 中文 language switch / 中英文切换
 
 ## Supported Formats / 支持格式
-.mp3, .m4a, .aac
 
-## Stack / 技术栈
+- `.mp3`
+- `.m4a`
+- `.aac`
+- `.wav`
+- `.flac`
+- `.ogg`
 
-- `Node.js`
-- `Express`
-- `multer`
-- `ffmpeg`
-- `Web Audio API`
-- `Docker Compose`
+## Highlights / 本次更新
 
-## Quick Start / 快速启动
+- Optional live FPS monitor with local persistence.
+- Playlist create, edit, delete, and track removal.
+- Duplicate uploads replace the existing track instead of creating duplicates.
+- Improved lyrics parsing, metadata refresh, responsive polling, and reduced-motion behavior.
+
+## Docker Hub Image / Docker Hub 镜像
+
+- Repository: `reallapt/docker_music`
+- Recommended tag: `v2`
+
+## Quick Start With Tag / 使用 Tag 快速启动
+
+### 1. Pull Image / 拉取镜像
 
 ```bash
-docker compose up --build
+docker pull reallapt/docker_music:v2
 ```
 
-Then open `http://localhost:3000`.
+### 2. Run Container / 运行容器
 
-然后打开 `http://localhost:3000`。
+```bash
+docker run -d \
+  --name docker-music-player \
+  -p 3002:3000 \
+  -e PORT=3000 \
+  -e DEFAULT_TARGET_LUFS=-14 \
+  -e PROCESSING_CONCURRENCY=all \
+  -e CONVERSION_CONCURRENCY=all \
+  -v ./data:/app/data \
+  reallapt/docker_music:v2
+```
 
-## Docker CLI Deployment / Docker 命令行部署
+Then open `http://localhost:3002`.
 
-### 1. Clone / 拉取项目
+然后打开 `http://localhost:3002`。
+
+## Docker Compose With Tag / 使用 Tag 的 Docker Compose
+
+Create a `docker-compose.yml` like this:
+
+按下面内容创建 `docker-compose.yml`：
+
+```yaml
+services:
+  music-player:
+    image: reallapt/docker_music:v2
+    container_name: docker-music-player
+    ports:
+      - "3002:3000"
+    environment:
+      PORT: 3000
+      DEFAULT_TARGET_LUFS: -14
+      PROCESSING_CONCURRENCY: all
+      CONVERSION_CONCURRENCY: all
+    volumes:
+      - ./data:/app/data
+```
+
+Start it with:
+
+启动命令：
+
+```bash
+docker compose up -d
+```
+
+## Update To A New Tag / 升级到新 Tag
+
+```bash
+docker pull reallapt/docker_music:v2
+docker compose down
+docker compose up -d
+```
+
+If you want the newest build and accept mutable tags, you can also use:
+
+如果你想直接使用最新构建，也可以使用：
+
+```bash
+docker pull reallapt/docker_music:latest
+```
+
+## Local Source Build / 本地源码构建
 
 ```bash
 git clone https://github.com/reallapt/docker_music.git
 cd docker_music
+docker compose up --build -d
 ```
 
-### 2. Build and Start / 构建并启动
+## Notes / 说明
 
-```bash
-docker compose build --no-cache
-docker compose up -d
-```
-
-### 3. View Logs / 查看日志
-
-```bash
-docker compose logs -f
-```
-
-### 4. Stop Service / 停止服务
-
-```bash
-docker compose down
-```
-
-### 5. Restart After Update / 更新后重启
-
-```bash
-git pull
-docker compose build --no-cache
-docker compose up -d
-```
-
-## Server Example / 服务器部署示例
-
-If you deploy to `/opt/music-player` on a Linux server:
-
-如果你要部署到 Linux 服务器的 `/opt/music-player`：
-
-```bash
-sudo mkdir -p /opt/music-player
-sudo chown -R $USER:$USER /opt/music-player
-cd /opt/music-player
-git clone https://github.com/reallapt/docker_music.git .
-docker compose build --no-cache
-docker compose up -d
-```
+- Uploaded files are stored in `/app/data`.
+- The container listens on port `3000`.
+- The example above maps host port `3002` to container port `3000`.
 
 ## Project Note / 项目说明
 
-This version of the project, including the UI, upload workflow, playback logic, LUFS leveling, equalizer integration, and Docker setup, was written and assembled by OpenAI Codex for the repository owner.
-
-这个版本的项目，包括界面、上传流程、播放逻辑、LUFS 平衡、均衡器集成和 Docker 部署结构，均由 OpenAI Codex 为仓库所有者编写与整合完成。
+This v2 release includes the FPS switch and monitor, playlist management fixes, duplicate-upload replacement, improved lyric extraction, responsive polling and animation optimizations, playback-history fixes, and settings persistence fixes.
