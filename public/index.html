@@ -97,16 +97,6 @@
           </div>
         </section>
 
-        <section class="nav-section customize-nav" id="customizeMenu">
-          <p class="eyebrow" data-i18n="navCustomize">Customize</p>
-          <div class="subnav-menu">
-            <button class="subnav-item active" data-customize-view="playback" type="button" data-i18n="subnavPlayback">
-              Playback
-            </button>
-            <button class="subnav-item" data-customize-view="eq" type="button" data-i18n="subnavEqualizer">Equalizer</button>
-            <button class="subnav-item" data-customize-view="convert" type="button" data-i18n="subnavConverter">Converter</button>
-          </div>
-        </section>
       </aside>
 
       <main class="main-stage">
@@ -120,10 +110,10 @@
 
             <div class="library-toolbar">
               <div class="library-toolbar-actions">
-                <button id="toggleLibrarySelectionButton" class="secondary-button" type="button">
+                <button id="toggleLibrarySelectionButton" class="secondary-button" type="button" data-i18n="librarySelectMode">
                   Select
                 </button>
-                <button id="deleteSelectedTracksButton" class="danger-button" type="button" hidden>
+                <button id="deleteSelectedTracksButton" class="danger-button" type="button" data-i18n="deleteSelectedTracks" hidden>
                   Delete Selected
                 </button>
                 <span id="librarySelectionSummary" class="support-pill" hidden>0 selected</span>
@@ -218,6 +208,7 @@
                 <div class="playlist-detail-actions">
                   <button id="playPlaylistButton" class="primary-button" type="button" data-i18n="playPlaylist">Play Playlist</button>
                   <button id="editPlaylistButton" class="secondary-button" type="button" data-i18n="editPlaylist">Edit</button>
+                  <button id="deletePlaylistButton" class="danger-button" type="button" data-i18n="deletePlaylist">Delete Playlist</button>
                   <button id="closePlaylistDetailButton" class="secondary-button" type="button" data-i18n="backToPlaylists">Close</button>
                 </div>
               </div>
@@ -234,6 +225,13 @@
         </section>
 
         <section class="content-panel" id="customizeView">
+          <div class="subnav-menu customize-tabs" role="tablist" aria-label="Customize options">
+            <button class="subnav-item active" data-customize-view="playback" type="button" data-i18n="subnavPlayback">
+              Playback
+            </button>
+            <button class="subnav-item" data-customize-view="eq" type="button" data-i18n="subnavEqualizer">Equalizer</button>
+            <button class="subnav-item" data-customize-view="convert" type="button" data-i18n="subnavConverter">Converter</button>
+          </div>
           <section class="customize-panel active" id="playbackPanel">
             <section class="panel glass-card">
               <div class="panel-heading">
@@ -254,6 +252,13 @@
                   <input id="autoLevelToggle" type="checkbox" checked />
                   <strong data-i18n="enablePlaybackComp">Enable playback compensation</strong>
                   <small data-i18n="usesMeasuredLoudness">Uses measured loudness per track.</small>
+                </label>
+
+                <label class="control-card toggle-card">
+                  <span class="mini-label" data-i18n="showFps">Show FPS</span>
+                  <input id="showFpsToggle" type="checkbox" />
+                  <strong data-i18n="showFpsDescription">Display live frame rate</strong>
+                  <small data-i18n="showFpsMeta">Shows a small FPS readout in the top-right corner.</small>
                 </label>
 
                 <article class="control-card stat-control">
@@ -398,6 +403,11 @@
       <audio id="audioPlayer" preload="metadata"></audio>
     </footer>
 
-    <script src="/app.js"></script>
+    <div id="fpsMonitor" class="fps-monitor" hidden aria-live="off">
+      <span data-i18n="fpsLabel">FPS</span>
+      <strong id="fpsValue">--</strong>
+    </div>
+
+    <script src="/app.js?v=20260731-fps-tabs"></script>
   </body>
 </html>
